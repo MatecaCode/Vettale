@@ -58,29 +58,6 @@ const CommandList = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
 >(({ className, ...props }, ref) => {
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const target = e.currentTarget;
-    target.scrollTop += e.deltaY;
-  };
-
-  const handleTouchStart = (event: React.TouchEvent) => {
-    const target = event.currentTarget as HTMLElement;
-    target.dataset.touchStartY = event.touches[0].clientY.toString();
-  };
-
-  const handleTouchMove = (event: React.TouchEvent) => {
-    event.preventDefault();
-    const target = event.currentTarget as HTMLElement;
-    const touchStartY = parseInt(target.dataset.touchStartY || '0');
-    const currentY = event.touches[0].clientY;
-    const deltaY = touchStartY - currentY;
-    
-    target.scrollTop += deltaY;
-    target.dataset.touchStartY = currentY.toString();
-  };
-
   return (
     <CommandPrimitive.List
       ref={ref}
@@ -89,9 +66,6 @@ const CommandList = React.forwardRef<
         scrollbarWidth: 'thin',
         scrollbarColor: 'hsl(var(--border)) transparent'
       }}
-      onWheel={handleWheel}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       {...props}
     />
   );

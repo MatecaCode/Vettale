@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import AdminNotificationBell from '@/components/AdminNotificationBell';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -133,14 +134,17 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
               <span>VetTale Admin</span>
             </Link>
             
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden"
-            >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
+            <div className="flex items-center gap-1">
+              <AdminNotificationBell />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="lg:hidden"
+              >
+                {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -152,13 +156,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         )}>
           {/* Desktop Header */}
-          <div className="hidden lg:block px-6 py-6 border-b border-gray-200">
+          <div className="hidden lg:flex items-center justify-between px-6 py-6 border-b border-gray-200">
             <Link to="/admin" className="flex items-center gap-3 text-xl font-bold text-gray-900">
               <div className="h-10 w-10 bg-brand-blue/10 rounded-xl flex items-center justify-center">
                 <Home className="h-6 w-6 text-brand-blue" />
               </div>
               <span>VetTale Admin</span>
             </Link>
+            <AdminNotificationBell />
           </div>
 
           {/* Navigation */}

@@ -45,6 +45,7 @@ import AdminPets from "./pages/AdminPets";
 import AdminBookingSuccess from "./pages/AdminBookingSuccess";
 import AdminAgendaHoje from "./pages/AdminAgendaHoje";
 import AdminStaffAvailability from "./pages/AdminStaffAvailability";
+import AdminNotifications from "./pages/AdminNotifications";
 import EditServicePricing from "./pages/EditServicePricing";
 import AdminPricing from "./pages/AdminPricing";
 import { AuthProvider } from "./hooks/useAuth";
@@ -283,6 +284,7 @@ function App() {
               <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin/edit-logs" element={<AdminEditLogs />} />
               <Route path="/admin/agenda-hoje" element={<AdminAgendaHoje />} />
+              <Route path="/admin/notifications" element={<AdminNotifications />} />
               <Route path="/admin/debug/availability/:providerId/:date" element={<AdminDebugAvailability />} />
               
               {/* Legacy Admin Routes (keeping for compatibility) */}

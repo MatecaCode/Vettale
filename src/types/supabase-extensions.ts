@@ -1,6 +1,37 @@
 
+// ─── Admin Notification Types ─────────────────────────────────────────────────
+export interface AdminNotification {
+  id: string;
+  type: string;
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+  deep_link: string;
+  source: string;
+  created_at: string;
+  read_at: string | null;
+}
+
 // Custom type extensions for Supabase functions not in the auto-generated types
 export interface CustomDatabaseFunctions {
+  get_admin_notifications: {
+    Args: { _limit?: number; _offset?: number };
+    Returns: AdminNotification[];
+  };
+  get_admin_unread_notification_count: {
+    Args: Record<string, never>;
+    Returns: number;
+  };
+  mark_admin_notification_read: {
+    Args: { _notification_id: string };
+    Returns: void;
+  };
+  mark_all_admin_notifications_read: {
+    Args: Record<string, never>;
+    Returns: void;
+  };
   reduce_availability_capacity: {
     Args: {
       p_resource_type: string;

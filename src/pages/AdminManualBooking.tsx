@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -29,8 +31,11 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  Search
+  Search,
+  Check,
+  ChevronsUpDown
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import AdminLayout from '@/components/AdminLayout';
 import { usePricing } from '@/hooks/usePricing';
 import { useAdminAvailability } from '@/hooks/useAdminAvailability';
@@ -140,6 +145,10 @@ const AdminManualBooking = () => {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [isLoadingPets, setIsLoadingPets] = useState(false);
+  
+  // Client search states for lazy loading
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [isClientComboboxOpen, setIsClientComboboxOpen] = useState(false);
 
   // Selected items for comboboxes
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -291,7 +300,7 @@ const AdminManualBooking = () => {
 
   // Load initial data
   useEffect(() => {
-    loadClients();
+    //loadClients();
     loadServices();
     loadStaffMembers();
   }, []);
@@ -304,6 +313,70 @@ const AdminManualBooking = () => {
       setPets([]);
     }
   }, [selectedClient]);
+
+  // Clear search when combobox closes
+  useEffect(() => {
+    if (!isClientComboboxOpen) {
+      setClientSearchQuery('');
+      // Keep the selected client in the list if one is selected
+      if (selectedClient) {
+        setClients([selectedClient]);
+      } else {
+        setClients([]);
+      }
+    }
+  }, [isClientComboboxOpen, selectedClient]);
+
+  // Debounced client search - only fetches when user types
+  useEffect(() => {
+    // Don't search if the query is empty or too short
+    if (!clientSearchQuery || clientSearchQuery.length < 1) {
+      // If there's a selected client, keep it in the list
+      if (selectedClient && clientSearchQuery.length === 0) {
+        setClients([selectedClient]);
+      } else {
+        setClients([]);
+      }
+      return;
+    }
+
+    const searchClients = async () => {
+      setIsLoadingClients(true);
+      try {
+        console.log('🔍 [ADMIN_MANUAL_BOOKING] Searching clients with query:', clientSearchQuery);
+        
+        // Search clients by name or email that START WITH the query (not contains)
+        const { data: clientsData, error: clientsError } = await supabase
+          .from('clients')
+          .select('id, name, email, user_id, phone')
+          .or(`name.ilike.${clientSearchQuery}%,email.ilike.${clientSearchQuery}%`)
+          .order('name')
+          .limit(50); // Limit results for performance
+        
+        if (clientsError) {
+          console.error('Error searching clients:', clientsError);
+          toast.error('Erro ao buscar clientes');
+          return;
+        }
+        
+        console.log('🔍 [ADMIN_MANUAL_BOOKING] Found clients:', clientsData?.length || 0);
+        setClients(clientsData || []);
+      } catch (error) {
+        console.error('Error searching clients:', error);
+        toast.error('Erro ao buscar clientes');
+      } finally {
+        setIsLoadingClients(false);
+      }
+    };
+
+    // Debounce the search by 300ms (faster for better UX)
+    const timeoutId = setTimeout(() => {
+      searchClients();
+    }, 300);
+
+    // Cleanup function to cancel the timeout if the query changes
+    return () => clearTimeout(timeoutId);
+  }, [clientSearchQuery, selectedClient]);
 
   // Load time slots when date or staff changes
   useEffect(() => {
@@ -1205,20 +1278,79 @@ const AdminManualBooking = () => {
               {/* Client Selection */}
               <div className="space-y-2">
                 <Label htmlFor="client-select">Cliente</Label>
-                <ClientCombobox
-                  clients={clients ?? []}
-                  onSelect={(client) => {
-                    setSelectedClient(client);
-                    validateSelectedClient(client);
-                    setBookingData(prev => ({ 
-                      ...prev, 
-                    clientUserId: client.user_id ?? null, 
-                    clientId: client.id,
-                      petId: null // Reset pet when client changes
-                    }));
-                  }}
-                  selectedClient={selectedClient}
-                />
+                <Popover open={isClientComboboxOpen} onOpenChange={setIsClientComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={isClientComboboxOpen}
+                      className="w-full justify-between"
+                    >
+                      {selectedClient
+                        ? selectedClient.name
+                        : 'Digite para buscar cliente...'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command shouldFilter={false} className="w-full border-0 focus:ring-0 focus:ring-offset-0 p-0">
+                      <CommandInput 
+                        placeholder="Buscar cliente..." 
+                        value={clientSearchQuery}
+                        onValueChange={setClientSearchQuery}
+                      />
+                      <CommandList>
+                        {isLoadingClients ? (
+                          <div className="py-6 text-center text-sm">Buscando clientes...</div>
+                        ) : clientSearchQuery.length < 1 ? (
+                          <CommandEmpty>Digite para buscar clientes</CommandEmpty>
+                        ) : clients.length === 0 ? (
+                          <CommandEmpty>Nenhum cliente encontrado</CommandEmpty>
+                        ) : (
+                          <CommandGroup>
+                            {clients.map((client) => (
+                              <CommandItem
+                                key={client.id}
+                                value={client.name}
+                                onSelect={(currentValue) => {
+                                  // Find the client by name (case-insensitive)
+                                  const selectedClientData = clients.find(
+                                    (c) => c.name.toLowerCase() === currentValue.toLowerCase()
+                                  );
+                                  if (selectedClientData) {
+                                    console.log('🔍 [ADMIN_MANUAL_BOOKING] Client selected:', selectedClientData.id);
+                                    setSelectedClient(selectedClientData);
+                                    validateSelectedClient(selectedClientData);
+                                    setBookingData(prev => ({ 
+                                      ...prev, 
+                                      clientUserId: selectedClientData.user_id ?? null, 
+                                      clientId: selectedClientData.id,
+                                      petId: null // Reset pet when client changes
+                                    }));
+                                    setIsClientComboboxOpen(false);
+                                  }
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    selectedClient?.id === client.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{client.name}</span>
+                                  {client.email && (
+                                    <span className="text-xs text-gray-500">{client.email}</span>
+                                  )}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {clientNeedsUpdate && selectedClient && (
                   <Alert>
                     <AlertTriangle className="h-4 w-4" />

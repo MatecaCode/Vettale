@@ -653,3 +653,86 @@ tests:
 - Mobile (Android/iOS): deep link opens WhatsApp with the same pre-typed text.
 status: production  outcome: pass
 [/LOG_UPDATE]
+
+[LOG_UPDATE]
+date: 2026-03-17
+by: Claude in Cursor
+area: Admin Notification Center — V1 (booking_created_by_client + client_account_claimed)
+change_summary:
+- Implemented additive admin notification system (Option A from discovery audit).
+- Added two new tables: `public.admin_notifications` and `public.admin_notification_receipts`.
+- Added five DB helper functions: `notify_all_admins`, `get_admin_notifications`,
+  `get_admin_unread_notification_count`, `mark_admin_notification_read`,
+  `mark_all_admin_notifications_read`.
+- Modified `public.create_booking_client` (both overloads) to emit
+  `booking_created_by_client` notification via `notify_all_admins`.
+  Core booking atomicity (`create_booking_atomic`) is UNCHANGED.
+  Notification emit is wrapped in BEGIN/EXCEPTION — booking cannot be rolled back
+  by a notification failure.
+- Modified `public.link_client_when_email_confirmed` to emit
+  `client_account_claimed` notification when an admin-created client is linked.
+  All existing link/role-upsert logic is UNCHANGED.
+  Notification only fires when GET DIAGNOSTICS row count > 0.
+- Added `AdminNotificationBell` component with Popover dropdown, unread badge
+  (capped at 99+), "Mark all as read", and "View all" link.
+- Added `useAdminNotifications` hook backed by Supabase RPC + Realtime subscription
+  on `admin_notification_receipts` inserts for live unread-count updates.
+- Added `/admin/notifications` full-page notification registry (`AdminNotifications.tsx`).
+- Modified `AdminLayout.tsx` to show `AdminNotificationBell` in desktop sidebar
+  header and mobile header.
+- Added route `/admin/notifications` to `App.tsx`.
+rationale:
+- Additive layer only; no booking semantics changed.
+- DB-side producers (not frontend writes) ensure reliability.
+- Per-admin receipt table gives independent read state across multiple admins.
+- Dedupe key (e.g., `booking_created_by_client:<appointment_id>`) prevents
+  duplicate notifications on booking retry or trigger re-fire.
+- `notify_all_admins` is SECURITY DEFINER so it can be called from SECURITY INVOKER
+  booking functions (running as client user) without privilege escalation risks.
+naming_rules_followed:
+- Never used "provider" or `provider_id`; all staff references use `staff_profile_id`.
+- `_client_id` / `_client_user_id` booking invariant fully preserved.
+- No changes to `create_booking_atomic`, `staff_availability`, or approval flows.
+migrations:
+- `supabase/migrations/20260317000000_admin_notification_system_v1.sql`
+- `supabase/migrations/20260317000001_booking_created_notification_emit.sql`
+- `supabase/migrations/20260317000002_client_claimed_notification_emit.sql`
+touch_points:
+- db: public.admin_notifications (NEW TABLE)
+- db: public.admin_notification_receipts (NEW TABLE)
+- db: public.notify_all_admins (NEW FUNCTION — SECURITY DEFINER)
+- db: public.get_admin_notifications (NEW RPC)
+- db: public.get_admin_unread_notification_count (NEW RPC)
+- db: public.mark_admin_notification_read (NEW RPC)
+- db: public.mark_all_admin_notifications_read (NEW RPC)
+- db: public.create_booking_client (MODIFIED — notification emit added)
+- db: public.link_client_when_email_confirmed (MODIFIED — notification emit added)
+- code: src/hooks/useAdminNotifications.tsx (NEW)
+- code: src/components/AdminNotificationBell.tsx (NEW)
+- code: src/pages/AdminNotifications.tsx (NEW)
+- code: src/components/AdminLayout.tsx (MODIFIED — bell added to header)
+- code: src/App.tsx (MODIFIED — /admin/notifications route added)
+- code: src/types/supabase-extensions.ts (MODIFIED — AdminNotification type + RPC types)
+tests_performed:
+- T01 PASS: admin_notifications + admin_notification_receipts tables created with all expected columns.
+- T02 PASS: Partial unique dedupe index (idx_admin_notif_dedupe_key) exists.
+- T03 PASS: RLS enabled on both tables.
+- T04 PASS: All five helper functions registered in public schema.
+- T05 PASS: notify_all_admins end-to-end — creates notification, fans out to all 4 admins.
+- T06 PASS: Receipt fan-out yields 4 rows (one per admin), all with read_at = NULL.
+- T07 PASS: Dedupe test — second call with same dedupe_key returns NULL, no duplicate row.
+- T08 PASS: Per-admin read isolation — marking one admin's receipt read does not affect others.
+- T09 PASS: Both create_booking_client overloads contain notify_all_admins call.
+- T10 PASS: link_client_when_email_confirmed contains notify_all_admins call.
+- T11 PASS: RLS policies confirmed: select-admin on notifications, select+update-own on receipts.
+- T12 PASS: create_booking_atomic is UNCHANGED (no notify_all_admins call inside it).
+- T13 PASS: Test data cleanup successful (0 remaining test rows).
+deferred_to_v2:
+- booking_status_changed
+- booking_addon_changed / booking_change_requested
+- client_pet_created
+- Archive / dismiss behavior
+- Generic event bus / projection architecture
+- Notification preferences / admin mute
+status: production  outcome: pass
+[/LOG_UPDATE]

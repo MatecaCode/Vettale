@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { log } from '@/utils/logger';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 import { createAdminBooking } from '@/utils/adminBookingUtils';
 import { useNavigate } from 'react-router-dom';
@@ -76,6 +80,11 @@ const AdminBookingPage = () => {
   const [availabilitySummary, setAvailabilitySummary] = useState<AvailabilitySummary[]>([]);
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   
+  // Client search states
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [isClientComboboxOpen, setIsClientComboboxOpen] = useState(false);
+  const [isLoadingClients, setIsLoadingClients] = useState(false);
+  
   // Updated state for dual-service support
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedPet, setSelectedPet] = useState('');
@@ -135,7 +144,7 @@ const AdminBookingPage = () => {
     };
   }, []);
 
-  // Load initial data
+  // Load initial data (excluding clients - they will be loaded on search)
   useEffect(() => {
     if (!isAdmin) return;
     
@@ -145,21 +154,6 @@ const AdminBookingPage = () => {
       setIsDataLoading(true);
       setDataError(null);
       try {
-        // Load clients
-        const { data: clientsData, error: clientsError } = await supabase
-          .from('clients')
-          .select('id, name, user_id')
-          .order('name');
-        
-        if (clientsError) {
-          console.error('Error loading clients:', clientsError);
-          toast.error('Erro ao carregar clientes');
-          return;
-        }
-        
-        console.log('🔍 [ADMIN_BOOKING] Loaded clients:', clientsData);
-        setClients(clientsData || []);
-
         // Load services with additional fields for role requirements
         const { data: servicesData } = await supabase
           .from('services')
@@ -177,7 +171,6 @@ const AdminBookingPage = () => {
         setStaff(staffData || []);
         
         console.log('🔍 [ADMIN_BOOKING] Initial data loaded successfully');
-        console.log('🔍 [ADMIN_BOOKING] Clients:', clientsData?.length || 0);
         console.log('🔍 [ADMIN_BOOKING] Services:', servicesData?.length || 0);
         console.log('🔍 [ADMIN_BOOKING] Staff:', staffData?.length || 0);
       } catch (error) {
@@ -225,6 +218,76 @@ const AdminBookingPage = () => {
 
     loadPets();
   }, [selectedClient]);
+
+  // Clear search when combobox closes
+  useEffect(() => {
+    if (!isClientComboboxOpen) {
+      setClientSearchQuery('');
+      // Keep the selected client in the list if one is selected
+      if (selectedClient) {
+        const selectedClientData = clients.find(c => c.id === selectedClient);
+        if (selectedClientData) {
+          setClients([selectedClientData]);
+        }
+      } else {
+        setClients([]);
+      }
+    }
+  }, [isClientComboboxOpen]);
+
+  // Debounced client search
+  useEffect(() => {
+    // Don't search if the query is empty
+    if (!clientSearchQuery || clientSearchQuery.length < 1) {
+      // If there's a selected client, keep it in the list
+      if (selectedClient && clientSearchQuery.length === 0) {
+        const selectedClientData = clients.find(c => c.id === selectedClient);
+        if (selectedClientData) {
+          setClients([selectedClientData]);
+        }
+      } else {
+        setClients([]);
+      }
+      return;
+    }
+
+    const searchClients = async () => {
+      setIsLoadingClients(true);
+      try {
+        console.log('🔍 [ADMIN_BOOKING] Searching clients with query:', clientSearchQuery);
+        
+        // Search clients by name that START WITH the query (not contains)
+        const { data: clientsData, error: clientsError } = await supabase
+          .from('clients')
+          .select('id, name, user_id')
+          .ilike('name', `${clientSearchQuery}%`)
+          .order('name')
+          .limit(50); // Limit results for performance
+        
+        if (clientsError) {
+          console.error('Error searching clients:', clientsError);
+          toast.error('Erro ao buscar clientes');
+          return;
+        }
+        
+        console.log('🔍 [ADMIN_BOOKING] Found clients:', clientsData?.length || 0);
+        setClients(clientsData || []);
+      } catch (error) {
+        console.error('Error searching clients:', error);
+        toast.error('Erro ao buscar clientes');
+      } finally {
+        setIsLoadingClients(false);
+      }
+    };
+
+    // Debounce the search by 300ms
+    const timeoutId = setTimeout(() => {
+      searchClients();
+    }, 300);
+
+    // Cleanup function to cancel the timeout if the query changes
+    return () => clearTimeout(timeoutId);
+  }, [clientSearchQuery, selectedClient, clients]);
 
   // Handle primary service selection
   const handlePrimaryServiceChange = (serviceId: string) => {
@@ -794,29 +857,72 @@ const AdminBookingPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="client">Cliente *</Label>
-                  <Select 
-                    value={selectedClient} 
-                    onValueChange={(value) => {
-                      console.log('🔍 [ADMIN_BOOKING] Client selected:', value);
-                      setSelectedClient(value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {clients.length === 0 && (
-                    <p className="text-sm text-red-600">Nenhum cliente encontrado</p>
-                  )}
+                  <Popover open={isClientComboboxOpen} onOpenChange={setIsClientComboboxOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={isClientComboboxOpen}
+                        className="w-full justify-between"
+                      >
+                        {selectedClient
+                          ? clients.find((client) => client.id === selectedClient)?.name || 'Cliente selecionado'
+                          : 'Digite para buscar cliente...'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput 
+                          placeholder="Buscar cliente..." 
+                          value={clientSearchQuery}
+                          onValueChange={setClientSearchQuery}
+                        />
+                        <CommandList>
+                          {isLoadingClients ? (
+                            <div className="py-6 text-center text-sm">Buscando clientes...</div>
+                          ) : clientSearchQuery.length < 1 ? (
+                            <CommandEmpty>Digite para buscar clientes</CommandEmpty>
+                          ) : clients.length === 0 ? (
+                            <CommandEmpty>Nenhum cliente encontrado</CommandEmpty>
+                          ) : (
+                            <CommandGroup>
+                              {clients.map((client) => (
+                                <CommandItem
+                                  key={client.id}
+                                  value={client.name}
+                                  onSelect={(currentValue) => {
+                                    // Find the client by name (case-insensitive)
+                                    const selectedClientData = clients.find(
+                                      (c) => c.name.toLowerCase() === currentValue.toLowerCase()
+                                    );
+                                    if (selectedClientData) {
+                                      console.log('🔍 [ADMIN_BOOKING] Client selected:', selectedClientData.id);
+                                      setSelectedClient(selectedClientData.id);
+                                      setIsClientComboboxOpen(false);
+                                    }
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      selectedClient === client.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {client.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   <p className="text-xs text-gray-500">
-                    Clientes carregados: {clients.length} | Cliente selecionado: {selectedClient || 'Nenhum'}
+                    {clientSearchQuery.length >= 1 
+                      ? `Clientes encontrados: ${clients.length}`
+                      : 'Digite para buscar clientes'
+                    } | Cliente selecionado: {selectedClient ? clients.find(c => c.id === selectedClient)?.name || 'Carregando...' : 'Nenhum'}
                   </p>
                 </div>
 
