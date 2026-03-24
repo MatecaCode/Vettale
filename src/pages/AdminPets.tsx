@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -10,23 +10,21 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { PetDobPicker } from '@/components/calendars/pet/PetDobPicker';
-import { ClientCombobox } from '@/components/ClientCombobox';
 import { BreedCombobox } from '@/components/BreedCombobox';
 import { toast } from 'sonner';
 import { 
   PawPrint, 
   Search, 
-  Filter, 
   Plus, 
   Edit, 
   Trash2, 
   User,
-  Calendar,
   FileText,
-  Cake,
   Dog,
   Cat,
-  HelpCircle
+  HelpCircle,
+  Loader2,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -65,15 +63,17 @@ interface Client {
 const AdminPets = () => {
   const { user } = useAuth();
   const [pets, setPets] = useState<Pet[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
   const [breeds, setBreeds] = useState<Breed[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [clientFilter, setClientFilter] = useState<string>('all');
-  const [breedFilter, setBreedFilter] = useState<string>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
+  // Async client search state (used in both create and edit modals)
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [clientSearchResults, setClientSearchResults] = useState<Client[]>([]);
+  const [isClientSearching, setIsClientSearching] = useState(false);
+  const [isClientPopoverOpen, setIsClientPopoverOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     breed: '',
@@ -88,12 +88,93 @@ const AdminPets = () => {
   const [selectedClient, setSelectedClient] = useState<Client | undefined>(undefined);
   const [selectedBreed, setSelectedBreed] = useState<Breed | undefined>(undefined);
 
-  // Load pets, clients and breeds
+  // Search-on-demand: only fires when term >= 2 chars OR a client filter is active.
+  // Runs two parallel queries (pet name + client name) and merges/deduplicates up to 50 results.
+  // Defined before the useEffects that reference it to avoid TDZ errors.
+  const searchPets = useCallback(async (term: string) => {
+    if (term.length < 2) {
+      setPets([]);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const cols = `
+        id, name, breed, breed_id, size, age, birth_date, notes,
+        created_at, updated_at, client_id,
+        clients:client_id (name, email)
+      `;
+
+      // Search pet name AND client name in parallel; merge and deduplicate
+      const [byName, clientRows] = await Promise.all([
+        supabase.from('pets').select(cols).ilike('name', `${term}%`).order('name').limit(50),
+        supabase.from('clients').select('id').ilike('name', `${term}%`).limit(30),
+      ]);
+
+      let combined = [...(byName.data ?? [])];
+
+      if (clientRows.data?.length) {
+        const ids = clientRows.data.map(c => c.id);
+        const { data: byClient } = await supabase
+          .from('pets')
+          .select(cols)
+          .in('client_id', ids)
+          .order('name')
+          .limit(50);
+        combined = [...combined, ...(byClient ?? [])];
+      }
+
+      const seen = new Set<string>();
+      setPets(
+        combined
+          .filter(p => !seen.has(p.id) && !!seen.add(p.id))
+          .slice(0, 50)
+          .map(pet => ({
+            ...pet,
+            client_name: (pet.clients as any)?.name,
+            client_email: (pet.clients as any)?.email,
+          }))
+      );
+    } catch (err) {
+      console.error('❌ [ADMIN_PETS] Search error:', err);
+      toast.error('Erro ao buscar pets');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Load breed list on mount (small reference table, used in modals)
   useEffect(() => {
-    fetchPets();
-    fetchClients();
     fetchBreeds();
   }, []);
+
+  // Debounced pet search
+  useEffect(() => {
+    const timer = setTimeout(() => searchPets(searchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm, searchPets]);
+
+  // Debounced async client search (for the Dono picker in modals)
+  const searchClients = useCallback(async (term: string) => {
+    if (term.length < 2) { setClientSearchResults([]); return; }
+    setIsClientSearching(true);
+    try {
+      const { data } = await supabase
+        .from('clients')
+        .select('id, name, email, user_id')
+        .ilike('name', `%${term}%`)
+        .order('name')
+        .limit(30);
+      setClientSearchResults(data ?? []);
+    } catch { /* ignore */ } finally {
+      setIsClientSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchClients(clientSearchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [clientSearchTerm, searchClients]);
 
   // Deep link support: ?edit=<petId> opens edit modal for that pet
   useEffect(() => {
@@ -119,72 +200,6 @@ const AdminPets = () => {
     })();
   }, []);
 
-  const fetchPets = async () => {
-    if (!user) return;
-    
-    setIsLoading(true);
-    try {
-      console.log('🔍 [ADMIN_PETS] Fetching pets with client info');
-      
-                                                       const { data, error } = await supabase
-          .from('pets')
-          .select(`
-            id,
-            name,
-            breed,
-            breed_id,
-            size,
-            age,
-            birth_date,
-            notes,
-            created_at,
-            updated_at,
-            client_id,
-            clients:client_id (name, email)
-          `)
-          .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('❌ [ADMIN_PETS] Supabase error:', error);
-        throw error;
-      }
-
-      const petsWithClientInfo = data?.map(pet => ({
-        ...pet,
-        client_name: (pet.clients as any)?.name,
-        client_email: (pet.clients as any)?.email
-      })) || [];
-
-      setPets(petsWithClientInfo);
-      console.log('📊 [ADMIN_PETS] Pets loaded:', petsWithClientInfo);
-      console.log('📊 [ADMIN_PETS] Raw data from database:', data);
-    } catch (error) {
-      console.error('❌ [ADMIN_PETS] Error fetching pets:', error);
-      toast.error('Erro ao carregar pets');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchClients = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('id, name, email, user_id')
-        .order('name');
-
-      if (error) {
-        console.error('❌ [ADMIN_PETS] Error fetching clients:', error);
-        throw error;
-      }
-
-      setClients(data || []);
-    } catch (error) {
-      console.error('❌ [ADMIN_PETS] Error fetching clients:', error);
-      toast.error('Erro ao carregar clientes');
-    }
-  };
-
   const fetchBreeds = async () => {
     try {
       const { data, error } = await supabase
@@ -205,17 +220,8 @@ const AdminPets = () => {
     }
   };
 
-     const filteredPets = pets.filter(pet => {
-     const matchesSearch = 
-       pet.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       pet.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       pet.breed?.toLowerCase().includes(searchTerm.toLowerCase());
-     
-     const matchesClient = clientFilter === 'all' || pet.client_id === clientFilter;
-     const matchesBreed = breedFilter === 'all' || pet.breed === breedFilter;
-     
-     return matchesSearch && matchesClient && matchesBreed;
-   });
+  // Server handles all filtering — use results directly
+  const filteredPets = pets;
 
        const handleCreatePet = async () => {
     if (!formData.name || !formData.client_id) {
@@ -229,23 +235,24 @@ const AdminPets = () => {
     }
 
            try {
-        const { data: petData, error: petError } = await supabase
-          .from('pets')
-          .insert({
-            name: formData.name,
-            breed: selectedBreed?.name || formData.breed,
-            breed_id: selectedBreed?.id || null,
-            size: formData.size,
-            age: formData.age,
-            birth_date: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
-            notes: formData.notes,
-            client_id: formData.client_id
-          })
-          .select()
-          .single();
+        const { data: result, error: fnError } = await supabase.functions.invoke('admin-manage-pet', {
+          body: {
+            action: 'create',
+            payload: {
+              name: formData.name,
+              breed: selectedBreed?.name || formData.breed,
+              breed_id: selectedBreed?.id || null,
+              size: formData.size,
+              age: formData.age,
+              birth_date: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
+              notes: formData.notes,
+              client_id: formData.client_id,
+            },
+          },
+        });
 
-      if (petError) {
-        console.error('❌ [ADMIN_PETS] Pet creation error:', petError);
+      if (fnError || !result?.ok) {
+        console.error('❌ [ADMIN_PETS] Pet creation error:', fnError || result?.error);
         toast.error('Erro ao criar pet');
         return;
       }
@@ -253,7 +260,7 @@ const AdminPets = () => {
       toast.success('Pet criado com sucesso');
       setIsCreateModalOpen(false);
       resetForm();
-      fetchPets();
+      searchPets(searchTerm);
     } catch (error) {
       console.error('❌ [ADMIN_PETS] Error creating pet:', error);
       toast.error('Erro ao criar pet');
@@ -289,24 +296,26 @@ const AdminPets = () => {
 
        console.log('🔍 [ADMIN_PETS] Update data:', updateData);
 
-       const { data, error } = await supabase
-         .from('pets')
-         .update(updateData)
-         .eq('id', selectedPet.id)
-         .select();
+       const { data: result, error: fnError } = await supabase.functions.invoke('admin-manage-pet', {
+          body: {
+            action: 'update',
+            pet_id: selectedPet.id,
+            payload: updateData,
+          },
+        });
 
-      if (error) {
-        console.error('❌ [ADMIN_PETS] Update error:', error);
+      if (fnError || !result?.ok) {
+        console.error('❌ [ADMIN_PETS] Update error:', fnError || result?.error);
         toast.error('Erro ao atualizar pet');
         return;
       }
 
-      console.log('✅ [ADMIN_PETS] Update successful:', data);
+      console.log('✅ [ADMIN_PETS] Update successful:', result?.data);
       toast.success('Pet atualizado com sucesso');
       setIsEditModalOpen(false);
       setSelectedPet(null);
       resetForm();
-      fetchPets();
+      searchPets(searchTerm);
     } catch (error) {
       console.error('❌ [ADMIN_PETS] Error updating pet:', error);
       toast.error('Erro ao atualizar pet');
@@ -315,19 +324,18 @@ const AdminPets = () => {
 
   const handleDeletePet = async (petId: string) => {
     try {
-      const { error } = await supabase
-        .from('pets')
-        .delete()
-        .eq('id', petId);
+      const { data: result, error: fnError } = await supabase.functions.invoke('admin-manage-pet', {
+        body: { action: 'delete', pet_id: petId },
+      });
 
-      if (error) {
-        console.error('❌ [ADMIN_PETS] Delete error:', error);
+      if (fnError || !result?.ok) {
+        console.error('❌ [ADMIN_PETS] Delete error:', fnError || result?.error);
         toast.error('Erro ao deletar pet');
         return;
       }
 
       toast.success('Pet deletado com sucesso');
-      fetchPets();
+      searchPets(searchTerm);
     } catch (error) {
       console.error('❌ [ADMIN_PETS] Error deleting pet:', error);
       toast.error('Erro ao deletar pet');
@@ -348,9 +356,11 @@ const AdminPets = () => {
     setBirthDate(undefined);
     setSelectedClient(undefined);
     setSelectedBreed(undefined);
+    setClientSearchTerm('');
+    setClientSearchResults([]);
   };
 
-       const openEditModal = (pet: Pet) => {
+  const openEditModal = async (pet: Pet) => {
     setSelectedPet(pet);
     setFormData({
       name: pet.name || '',
@@ -363,15 +373,23 @@ const AdminPets = () => {
       birth_date: pet.birth_date || ''
     });
     setBirthDate(pet.birth_date ? new Date(pet.birth_date) : undefined);
-    
-    // Find and set the selected client
-    const client = clients.find(c => c.id === pet.client_id);
-    setSelectedClient(client);
-    
+
+    // Fetch the specific client for this pet to pre-populate the picker
+    if (pet.client_id) {
+      try {
+        const { data } = await supabase
+          .from('clients')
+          .select('id, name, email, user_id')
+          .eq('id', pet.client_id)
+          .single();
+        if (data) setSelectedClient(data as Client);
+      } catch { /* picker will just start empty */ }
+    }
+
     // Find and set the selected breed
     const breed = breeds.find(b => b.id === pet.breed_id);
     setSelectedBreed(breed);
-    
+
     setIsEditModalOpen(true);
   };
 
@@ -458,34 +476,6 @@ const AdminPets = () => {
           </div>
           
           <div className="flex gap-2">
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-48">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filtrar por dono" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os donos</SelectItem>
-                {clients.map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-                         <Select value={breedFilter} onValueChange={setBreedFilter}>
-               <SelectTrigger className="w-40">
-                 <Filter className="h-4 w-4 mr-2" />
-                 <SelectValue placeholder="Raça" />
-               </SelectTrigger>
-               <SelectContent>
-                 <SelectItem value="all">Todas as raças</SelectItem>
-                 <SelectItem value="Golden Retriever">Golden Retriever</SelectItem>
-                 <SelectItem value="Border Collie">Border Collie</SelectItem>
-                 <SelectItem value="Chihuahua">Chihuahua</SelectItem>
-               </SelectContent>
-             </Select>
-
             <Dialog open={isCreateModalOpen} onOpenChange={(open) => {
               setIsCreateModalOpen(open);
               if (!open) {
@@ -559,16 +549,49 @@ const AdminPets = () => {
 
                                      <div>
                      <Label htmlFor="client">Dono *</Label>
-                     <ClientCombobox
-                       clients={clients}
-                       onSelect={(client) => {
-                         setSelectedClient(client);
-                         setFormData({ ...formData, client_id: client.id });
-                       }}
-                       selectedClient={selectedClient}
-                       disabled={false}
-                       isLoading={false}
-                     />
+                     <div className="relative">
+                       <div className="flex items-center border rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 bg-background">
+                         <Input
+                           id="client"
+                           className="border-0 shadow-none focus-visible:ring-0"
+                           placeholder="Digite para buscar cliente..."
+                           autoComplete="off"
+                           value={selectedClient ? selectedClient.name : clientSearchTerm}
+                           onChange={(e) => {
+                             setSelectedClient(undefined);
+                             setFormData({ ...formData, client_id: '' });
+                             setClientSearchTerm(e.target.value);
+                             setIsClientPopoverOpen(true);
+                           }}
+                           onFocus={() => setIsClientPopoverOpen(true)}
+                           onBlur={() => setTimeout(() => setIsClientPopoverOpen(false), 150)}
+                         />
+                         {selectedClient && (
+                           <button type="button" className="pr-2 text-gray-400 hover:text-gray-600"
+                             onMouseDown={(e) => { e.preventDefault(); setSelectedClient(undefined); setFormData({ ...formData, client_id: '' }); setClientSearchTerm(''); }}>
+                             <X className="h-4 w-4" />
+                           </button>
+                         )}
+                       </div>
+                       {isClientPopoverOpen && !selectedClient && (
+                         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                           {clientSearchTerm.length < 2 ? (
+                             <p className="px-3 py-2 text-sm text-gray-400">Digite para buscar um dono...</p>
+                           ) : isClientSearching ? (
+                             <p className="px-3 py-2 text-sm text-gray-400 flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" />Buscando...</p>
+                           ) : clientSearchResults.length === 0 ? (
+                             <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente encontrado</p>
+                           ) : clientSearchResults.map(c => (
+                             <button key={c.id} type="button"
+                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                               onMouseDown={(e) => { e.preventDefault(); setSelectedClient(c); setFormData({ ...formData, client_id: c.id }); setClientSearchTerm(''); setIsClientPopoverOpen(false); }}>
+                               <span className="font-medium">{c.name}</span>
+                               {c.email && <span className="text-gray-400 ml-2 text-xs">{c.email}</span>}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
                    </div>
                   <div>
                     <Label htmlFor="notes">Notas</Label>
@@ -596,32 +619,37 @@ const AdminPets = () => {
 
         {/* Pets Grid */}
         {isLoading ? (
-          <div className="text-center py-8">
+          <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Carregando pets...</p>
+            <p className="mt-3 text-gray-600">Buscando pets...</p>
           </div>
+        ) : searchTerm.length < 2 ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Busque um pet para começar</h3>
+              <p className="text-gray-500">
+                Digite pelo menos 2 caracteres para buscar por nome do pet ou dono.
+              </p>
+            </CardContent>
+          </Card>
         ) : filteredPets.length === 0 ? (
           <Card>
-            <CardContent className="text-center py-8">
+            <CardContent className="text-center py-12">
               <PawPrint className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                 {searchTerm || clientFilter !== 'all' || breedFilter !== 'all' ? 'Nenhum pet encontrado' : 'Nenhum pet cadastrado'}
-               </h3>
-               <p className="text-gray-600 mb-4">
-                 {searchTerm || clientFilter !== 'all' || breedFilter !== 'all' 
-                   ? 'Tente ajustar os filtros de busca' 
-                   : 'Comece criando o primeiro pet do sistema'
-                 }
-               </p>
-               {!searchTerm && clientFilter === 'all' && breedFilter === 'all' && (
-                <Button onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeiro Pet
-                </Button>
-              )}
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum pet encontrado</h3>
+              <p className="text-gray-600">
+                Nenhum resultado para{searchTerm ? ` "${searchTerm}"` : ''}.
+                Tente ajustar a busca ou os filtros.
+              </p>
             </CardContent>
           </Card>
         ) : (
+          <>
+            <p className="text-sm text-gray-500 mb-4">
+              Mostrando {filteredPets.length} resultado{filteredPets.length !== 1 ? 's' : ''}
+              {filteredPets.length === 50 ? ' (máximo de 50 — refine a busca para ver mais)' : ''}
+            </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPets.map((pet) => (
               <Card key={pet.id} className="hover:shadow-lg transition-shadow">
@@ -709,6 +737,7 @@ const AdminPets = () => {
               </Card>
             ))}
           </div>
+          </>
         )}
 
         {/* Edit Modal */}
@@ -780,16 +809,49 @@ const AdminPets = () => {
 
                              <div>
                  <Label htmlFor="edit-client">Dono</Label>
-                 <ClientCombobox
-                   clients={clients}
-                   onSelect={(client) => {
-                     setSelectedClient(client);
-                     setFormData({ ...formData, client_id: client.id });
-                   }}
-                   selectedClient={selectedClient}
-                   disabled={false}
-                   isLoading={false}
-                 />
+                 <div className="relative">
+                   <div className="flex items-center border rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 bg-background">
+                     <Input
+                       id="edit-client"
+                       className="border-0 shadow-none focus-visible:ring-0"
+                       placeholder="Digite para buscar cliente..."
+                       autoComplete="off"
+                       value={selectedClient ? selectedClient.name : clientSearchTerm}
+                       onChange={(e) => {
+                         setSelectedClient(undefined);
+                         setFormData({ ...formData, client_id: '' });
+                         setClientSearchTerm(e.target.value);
+                         setIsClientPopoverOpen(true);
+                       }}
+                       onFocus={() => setIsClientPopoverOpen(true)}
+                       onBlur={() => setTimeout(() => setIsClientPopoverOpen(false), 150)}
+                     />
+                     {selectedClient && (
+                       <button type="button" className="pr-2 text-gray-400 hover:text-gray-600"
+                         onMouseDown={(e) => { e.preventDefault(); setSelectedClient(undefined); setFormData({ ...formData, client_id: '' }); setClientSearchTerm(''); }}>
+                         <X className="h-4 w-4" />
+                       </button>
+                     )}
+                   </div>
+                   {isClientPopoverOpen && !selectedClient && (
+                     <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                       {clientSearchTerm.length < 2 ? (
+                         <p className="px-3 py-2 text-sm text-gray-400">Digite para buscar um dono...</p>
+                       ) : isClientSearching ? (
+                         <p className="px-3 py-2 text-sm text-gray-400 flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" />Buscando...</p>
+                       ) : clientSearchResults.length === 0 ? (
+                         <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente encontrado</p>
+                       ) : clientSearchResults.map(c => (
+                         <button key={c.id} type="button"
+                           className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                           onMouseDown={(e) => { e.preventDefault(); setSelectedClient(c); setFormData({ ...formData, client_id: c.id }); setClientSearchTerm(''); setIsClientPopoverOpen(false); }}>
+                           <span className="font-medium">{c.name}</span>
+                           {c.email && <span className="text-gray-400 ml-2 text-xs">{c.email}</span>}
+                         </button>
+                       ))}
+                     </div>
+                   )}
+                 </div>
                </div>
               <div>
                 <Label htmlFor="edit-notes">Notas</Label>

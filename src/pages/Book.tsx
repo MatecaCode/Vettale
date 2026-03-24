@@ -361,7 +361,16 @@ const Book = () => {
                     </div>
 
                     {/* Call to Action */}
-                    <div className="flex items-center justify-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <Button
+                        type="button"
+                        size="lg"
+                        variant="outline"
+                        onClick={enableTestMode}
+                        className="border-blue-200 text-blue-700 hover:bg-blue-50 px-6 py-2 rounded-xl font-semibold transition-all duration-300"
+                      >
+                        Teste o agendamento
+                      </Button>
                       <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-2 rounded-xl font-semibold transform hover:scale-105 transition-all duration-300 shadow-lg">
                         <Link to="/services">Conhecer Nossos Serviços</Link>
                       </Button>
