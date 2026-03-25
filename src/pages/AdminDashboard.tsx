@@ -56,76 +56,11 @@ const AdminDashboard = () => {
   const fetchDashboardStats = async () => {
     try {
       setLoading(true);
-      
-      // Fetch total users
-      const { count: usersCount } = await supabase
-        .from('user_roles')
-        .select('*', { count: 'exact', head: true });
-
-      // Fetch total pets
-      const { count: petsCount } = await supabase
-        .from('pets')
-        .select('*', { count: 'exact', head: true });
-
-      // Fetch total appointments
-      const { count: appointmentsCount } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true });
-
-      // Fetch today's services (excluding cancelled)
-      const today = new Date().toISOString().split('T')[0];
-      const { count: todayServicesCount } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true })
-        .eq('date', today)
-        .neq('status', 'cancelled');
-
-      // Fetch pending approvals
-      const { count: pendingApprovalsCount } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
-
-      // Fetch staff on duty (staff with active appointments today)
-      const { data: staffWithAppointments } = await supabase
-        .from('appointment_staff')
-        .select(`
-          staff_profile_id,
-          appointments!inner(
-            date,
-            status
-          )
-        `)
-        .eq('appointments.date', today)
-        .neq('appointments.status', 'cancelled');
-      
-      const uniqueStaffOnDuty = new Set(staffWithAppointments?.map(apt => apt.staff_profile_id)).size;
-
-      // Fetch revenue today (sum of total_price for today's appointments)
-      const { data: todayAppointments } = await supabase
-        .from('appointments')
-        .select('total_price')
-        .eq('date', today)
-        .eq('status', 'confirmed');
-      
-      const revenueToday = todayAppointments?.reduce((sum, apt) => sum + (apt.total_price || 0), 0) || 0;
-
-      // Fetch pending cancellations
-      const { count: pendingCancellationsCount } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'cancelled');
-
-      setStats({
-        totalUsers: usersCount || 0,
-        totalPets: petsCount || 0,
-        totalBookings: appointmentsCount || 0,
-        todayServices: todayServicesCount || 0,
-        pendingApprovals: pendingApprovalsCount || 0,
-        staffOnDuty: uniqueStaffOnDuty || 0,
-        revenueToday,
-        pendingCancellations: pendingCancellationsCount || 0,
-      });
+      const { data, error } = await supabase.functions.invoke('admin-get-dashboard-stats');
+      if (error || !data?.ok) {
+        throw new Error(data?.error ?? error?.message ?? 'Unknown error');
+      }
+      setStats(data.data);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
       toast.error('Erro ao carregar estatísticas do dashboard');

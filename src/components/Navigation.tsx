@@ -25,61 +25,53 @@ const Navigation = () => {
   // Display name shown in the user dropdown; prefer server-side role name (user_roles.name)
   const [displayName, setDisplayName] = React.useState<string>('Usuário');
 
+  // Check if user is staff and get their photo
+  const [staffPhotoUrl, setStaffPhotoUrl] = React.useState<string | null>(null);
+
   React.useEffect(() => {
-    const resolveDisplayName = async () => {
-      if (!user) {
-        setDisplayName('Usuário');
-        return;
-      }
+    if (!user) {
+      setDisplayName('Usuário');
+      setStaffPhotoUrl(null);
+      return;
+    }
 
-      // 1) Try metadata name
-      const metaName = (user.user_metadata?.name || '').toString().trim();
-      if (metaName) {
-        setDisplayName(metaName);
-      }
+    // Set display name from metadata immediately (synchronous — no network wait).
+    // This ensures the UI is never blank while the Edge Function responds.
+    const metaName = (user.user_metadata?.name || '').toString().trim();
+    if (metaName) setDisplayName(metaName);
 
-      try {
-        // 2) Prefer user_roles.name (populated on claim; reflects admin-entered client name)
-        const { data: roleRow } = await supabase
-          .from('user_roles')
-          .select('name, role')
-          .eq('user_id', user.id)
-          .order('role', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+    // Fetch authoritative context from the server (name, role, photo_url).
+    // Failures are silent — the metadata fallback above keeps the UI intact.
+    supabase.functions
+      .invoke('get-current-user-context')
+      .then(({ data }) => {
+        if (!data?.ok) return;
+        const { name, photo_url } = data.data ?? {};
+        if (name) setDisplayName(name);
+        setStaffPhotoUrl(photo_url ?? null);
+      })
+      .catch(() => { /* keep defaults */ });
 
-        const roleName = (roleRow?.name || '').toString().trim();
-        if (roleName) {
-          setDisplayName(roleName);
-        } else if (!metaName) {
-          // 3) Fallback to clients.name if available
-          const { data: clientRow } = await supabase
-            .from('clients')
-            .select('name')
-            .eq('user_id', user.id)
-            .limit(1)
-            .maybeSingle();
-          const clientName = (clientRow?.name || '').toString().trim();
-          if (clientName) setDisplayName(clientName);
-        }
-      } catch {
-        // keep current displayName
-      }
-    };
-
-    resolveDisplayName();
-
-    // Realtime update when user_roles for this user changes (e.g., claim completes)
-    const channel = supabase
+    // Realtime: update display name when user_roles.name changes (e.g. claim completes).
+    const rolesChannel = supabase
       .channel('user_roles_name_updates')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_roles', filter: `user_id=eq.${user?.id}` }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_roles', filter: `user_id=eq.${user.id}` }, (payload) => {
         const nextName = (payload.new as any)?.name?.toString().trim();
         if (nextName) setDisplayName(nextName);
       })
       .subscribe();
 
+    // Realtime: update staff photo when staff_profiles row changes.
+    const staffChannel = supabase
+      .channel('staff_profiles_changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'staff_profiles', filter: `user_id=eq.${user.id}` }, (payload) => {
+        setStaffPhotoUrl(payload.new?.photo_url ?? null);
+      })
+      .subscribe();
+
     return () => {
-      channel.unsubscribe();
+      rolesChannel.unsubscribe();
+      staffChannel.unsubscribe();
     };
   }, [user]);
 
@@ -98,75 +90,6 @@ const Navigation = () => {
     }
   };
 
-  // Check if user is staff and get their photo
-  const [staffPhotoUrl, setStaffPhotoUrl] = React.useState<string | null>(null);
-  
-  React.useEffect(() => {
-    const checkStaffStatus = async () => {
-      if (!user) {
-        log.debug('No user found, clearing staff status');
-        setStaffPhotoUrl(null);
-        return;
-      }
-      
-      // Only check staff_profiles for users who are actually staff
-      // Admin users should not be checked against staff_profiles
-      const userRoles = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      // Only proceed with staff profile check if user is actually staff
-      if (userRoles?.data?.role === 'staff') {
-        const { data: profile, error } = await supabase
-          .from('staff_profiles')
-          .select('id, photo_url')
-          .eq('user_id', user.id)
-          .maybeSingle();
-          
-        if (profile) {
-          setStaffPhotoUrl(profile.photo_url);
-        } else {
-          setStaffPhotoUrl(null);
-        }
-      } else {
-        setStaffPhotoUrl(null);
-      }
-    };
-    
-    checkStaffStatus();
-
-    // Set up real-time subscription to refresh photo when it changes
-    const subscription = supabase
-      .channel('staff_profiles_changes')
-      .on('postgres_changes', 
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'staff_profiles',
-          filter: `user_id=eq.${user?.id}`
-        }, 
-        (payload) => {
-          log.debug('Staff profile updated via subscription:', payload);
-          setStaffPhotoUrl(payload.new?.photo_url || null);
-          log.debug('Updated staff photo URL:', payload.new?.photo_url);
-        }
-      )
-      .subscribe();
-
-    // Also check for updates every few seconds to ensure we catch changes
-    const interval = setInterval(() => {
-      if (user) {
-        checkStaffStatus();
-      }
-    }, 3000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearInterval(interval);
-    };
-  }, [user]);
 
   // Different navigation items for staff vs regular users
   const getNavItems = () => {

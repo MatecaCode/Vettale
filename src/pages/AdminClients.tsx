@@ -166,18 +166,12 @@ const AdminClients = () => {
     if (!highlightId) return;
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('clients')
-          .select(`
-            id, user_id, name, phone, email, address, notes, location_id,
-            admin_created, created_by, needs_registration,
-            is_whatsapp, preferred_channel, emergency_contact_name, emergency_contact_phone,
-            preferred_staff_profile_id, accessibility_notes, general_notes,
-            marketing_source_code, marketing_source_other, birth_date, created_at, updated_at
-          `)
-          .eq('id', highlightId)
-          .single();
-        if (error || !data) return;
+        const { data: fnResult, error: fnError } = await supabase.functions.invoke(
+          'admin-manage-client',
+          { body: { action: 'get_by_id', client_id: highlightId } },
+        );
+        if (fnError || !fnResult?.ok || !fnResult?.data) return;
+        const data = fnResult.data;
         setTimeout(() => {
           // Open after initial data loads
           (openEditModal as any)(data);
@@ -248,96 +242,27 @@ const AdminClients = () => {
       const term = debouncedSearch;
       const digits = term.replace(/\D/g, '');
 
-      let query = supabase
-        .from('clients')
-        .select(`
-          id,
-          user_id,
-          name,
-          phone,
-          email,
-          address,
-          notes,
-          location_id,
-          created_at,
-          updated_at,
-          admin_created,
-          created_by,
-          claim_invited_at,
-          claimed_at,
-          needs_registration,
-          is_whatsapp,
-          preferred_channel,
-          emergency_contact_name,
-          emergency_contact_phone,
-          preferred_staff_profile_id,
-          accessibility_notes,
-          general_notes,
-          marketing_source_code,
-          marketing_source_other,
-          birth_date,
-          locations:location_id (name)
-        `, { count: 'exact' })
-        .order('updated_at', { ascending: false })
-        .range(from, to);
+      const { data: listResult, error: listFnError } = await supabase.functions.invoke(
+        'admin-manage-client',
+        {
+          body: {
+            action: 'list',
+            page: targetPage,
+            page_size: limit,
+            search: term,
+            location_filter: locationFilter,
+          },
+        },
+      );
 
-      // Filters: location
-      if (locationFilter !== 'all') {
-        query = query.eq('location_id', locationFilter);
+      if (listFnError || !listResult?.ok) {
+        const msg = listResult?.error ?? listFnError?.message ?? 'Unknown error';
+        console.error('❌ [ADMIN_CLIENTS] list error:', msg);
+        throw new Error(msg);
       }
 
-      // Filters: server-side search
-      if (term) {
-        // Build OR clause: name ILIKE, email ILIKE, phone ILIKE digits
-        const orParts = [
-          `name.ilike.%${term}%`,
-          `email.ilike.%${term}%`,
-        ];
-        if (digits.length >= 3) {
-          // Best-effort: phone ilike digits (works for many formats)
-          orParts.push(`phone.ilike.%${digits}%`);
-        }
-        query = query.or(orParts.join(','));
-      }
-
-      const { data, error, count } = await query;
-
-      if (error) {
-        console.error('❌ [ADMIN_CLIENTS] Supabase error:', error);
-        throw error;
-      }
-
-      // Restrict to true clients only (keep existing gate):
-      // - admin-created records (no user_id yet) OR user has 'client' role
-      let filteredForClientsOnly = data || [];
-      try {
-        const { data: roleRows, error: rolesError } = await supabase
-          .from('user_roles')
-          .select('user_id')
-          .eq('role', 'client');
-        
-        if (rolesError) {
-          console.warn('⚠️ [ADMIN_CLIENTS] Could not load user_roles; showing unfiltered client list', rolesError);
-        } else {
-          const clientRoleUserIds = new Set((roleRows || []).map((r: any) => r.user_id));
-          filteredForClientsOnly = (data || []).filter((c: any) => !c.user_id || clientRoleUserIds.has(c.user_id));
-        }
-      } catch (e) {
-        console.warn('⚠️ [ADMIN_CLIENTS] user_roles filtering failed; proceeding without role filter', e);
-      }
-
-      // Get pet counts for the current page only (acceptable, limited to 50)
-      const clientsWithPetCounts = await Promise.all((filteredForClientsOnly || []).map(async (client) => {
-        const { count: petCount } = await supabase
-          .from('pets')
-          .select('*', { count: 'exact', head: true })
-          .eq('client_id', client.id);
-        return {
-          ...client,
-          location_name: (client as any).locations?.name,
-          pet_count: petCount || 0
-        };
-      }));
+      const clientsWithPetCounts = listResult.data ?? [];
+      const count = listResult.total_count;
 
       setTotalCount(typeof count === 'number' ? count : null);
       setClients(replace ? clientsWithPetCounts : [...clients, ...clientsWithPetCounts]);

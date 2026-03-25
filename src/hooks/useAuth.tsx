@@ -58,37 +58,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuthError(null);
   };
 
-  const fetchUserRoles = async (userId: string) => {
+  const fetchUserRoles = async (_userId: string) => {
+    // user_id comes from the verified JWT inside the Edge Function — not passed in the body.
     try {
-      log.debug('Fetching user roles for:', userId);
-      
-      // Add timeout to prevent hanging
+      log.debug('Fetching user roles via Edge Function');
+
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('Role fetch timeout')), 10000);
       });
 
-      const fetchPromise = supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId);
+      const fetchPromise = supabase.functions.invoke('get-current-user-context');
 
       const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
-      if (error) {
-        log.error('Failed to fetch user roles:', error);
-        setAuthError(`Erro ao buscar roles do usuário: ${error.message}`);
-        return ['client']; // Default fallback role
+      if (error || !data?.ok) {
+        log.error('Failed to fetch user roles:', error ?? data?.error);
+        setAuthError(`Erro ao buscar roles do usuário: ${error?.message ?? data?.error}`);
+        return ['client'];
       }
 
-      const roles = data?.map(r => r.role) || ['client'];
+      const roles: string[] = data.data?.roles ?? ['client'];
       log.debug('User roles fetched:', roles);
-      log.debug('Raw data from database:', data);
-      console.log('👤 User ID being queried:', userId);
       return roles;
     } catch (error) {
       console.error('💥 Error fetching user roles:', error);
       setAuthError('Erro ao buscar roles do usuário');
-      return ['client']; // Default fallback role
+      return ['client'];
     }
   };
 
@@ -129,34 +124,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Ensure a clients row exists for the signed-in user (self-registration fallback)
-  const ensureClientRow = async (currentUser: User) => {
+  // Ensure a clients row exists for the signed-in user (self-registration fallback).
+  // user_id and metadata come from the verified JWT inside the Edge Function.
+  const ensureClientRow = async (_currentUser: User) => {
     try {
-      // Check if a client record already exists
-      const { data: existing } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-
-      if (existing) return; // nothing to do
-
-      const displayName = (currentUser.user_metadata?.name || '').toString() || null;
-      const email = currentUser.email || null;
-
-      const { error: insertError } = await supabase
-        .from('clients')
-        .insert({
-          user_id: currentUser.id,
-          name: displayName,
-          email,
-          admin_created: false,
-        })
-        .select()
-        .maybeSingle();
-
-      if (insertError && (insertError as any).code !== '23505') {
-        console.warn('[CLIENT_PROFILE] ensureClientRow insert failed', insertError);
+      const { data, error } = await supabase.functions.invoke('get-current-user-context', {
+        body: { action: 'ensure_client' },
+      });
+      if (error) {
+        console.warn('[CLIENT_PROFILE] ensureClientRow fn error', error.message);
+      } else if (data?.created) {
+        console.log('[CLIENT_PROFILE] ensureClientRow: created new client row via Edge Function');
       }
     } catch (e) {
       console.warn('[CLIENT_PROFILE] ensureClientRow error', e);
