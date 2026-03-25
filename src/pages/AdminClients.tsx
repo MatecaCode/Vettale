@@ -706,17 +706,17 @@ const AdminClients = () => {
       console.log('🔍 [ADMIN_CLIENTS] Creating client with data:', clientDataToInsert);
       
       // Create client record with all Client Profile 2.0 fields
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .insert(clientDataToInsert)
-        .select()
-        .single();
-
-      if (clientError) {
-        console.error('❌ [ADMIN_CLIENTS] Client creation error:', clientError);
-        toast.error('Erro ao criar cliente: ' + clientError.message);
+      const { data: createResult, error: createFnError } = await supabase.functions.invoke(
+        'admin-manage-client',
+        { body: { action: 'create', payload: clientDataToInsert } },
+      );
+      if (createFnError || !createResult?.ok) {
+        const msg = createResult?.error ?? createFnError?.message ?? 'Unknown error';
+        console.error('❌ [ADMIN_CLIENTS] Client creation error:', msg);
+        toast.error('Erro ao criar cliente: ' + msg);
         return;
       }
+      const clientData = createResult.data;
 
       console.log('✅ [ADMIN_CLIENTS] Client created successfully:', clientData);
 
@@ -810,31 +810,36 @@ const AdminClients = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('clients')
-        .update({
-          name: formData.name,
-          phone: formData.phone,
-          email: formData.email,
-          address: formData.address,
-          notes: formData.general_notes,
-          location_id: formData.location_id,
-          // Client Profile 2.0 fields
-          is_whatsapp: formData.is_whatsapp,
-          preferred_channel: formData.preferred_channel,
-          emergency_contact_name: formData.emergency_contact_name,
-          emergency_contact_phone: formData.emergency_contact_phone,
-          preferred_staff_profile_id: formData.preferred_staff_profile_id === 'none' ? null : formData.preferred_staff_profile_id,
-          accessibility_notes: formData.accessibility_notes,
-          general_notes: formData.general_notes,
-          marketing_source_code: formData.marketing_source_code === 'not_informed' ? null : formData.marketing_source_code,
-          marketing_source_other: formData.marketing_source_other,
-          birth_date: clientBirthDate ? format(clientBirthDate, 'yyyy-MM-dd') : null
-        })
-        .eq('id', selectedClient.id);
-
-      if (error) {
-        console.error('❌ [ADMIN_CLIENTS] Update error:', error);
+      const { data: updateResult, error: updateFnError } = await supabase.functions.invoke(
+        'admin-manage-client',
+        {
+          body: {
+            action: 'update',
+            client_id: selectedClient.id,
+            payload: {
+              name: formData.name,
+              phone: formData.phone,
+              email: formData.email,
+              address: formData.address,
+              notes: formData.general_notes,
+              location_id: formData.location_id,
+              is_whatsapp: formData.is_whatsapp,
+              preferred_channel: formData.preferred_channel,
+              emergency_contact_name: formData.emergency_contact_name,
+              emergency_contact_phone: formData.emergency_contact_phone,
+              preferred_staff_profile_id: formData.preferred_staff_profile_id === 'none' ? null : formData.preferred_staff_profile_id,
+              accessibility_notes: formData.accessibility_notes,
+              general_notes: formData.general_notes,
+              marketing_source_code: formData.marketing_source_code === 'not_informed' ? null : formData.marketing_source_code,
+              marketing_source_other: formData.marketing_source_other,
+              birth_date: clientBirthDate ? format(clientBirthDate, 'yyyy-MM-dd') : null,
+            },
+          },
+        },
+      );
+      if (updateFnError || !updateResult?.ok) {
+        const msg = updateResult?.error ?? updateFnError?.message ?? 'Unknown error';
+        console.error('❌ [ADMIN_CLIENTS] Update error:', msg);
         toast.error('Erro ao atualizar cliente');
         return;
       }

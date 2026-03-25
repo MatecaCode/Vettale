@@ -521,25 +521,36 @@ const AdminManualBooking = () => {
 
   const saveClientEdit = async () => {
     try {
-      const { error } = await supabase.from('clients').update({
-        name: clientEdit.name,
-        email: clientEdit.email || null,
-        phone: clientEdit.phone || null,
-        address: clientEdit.address || null,
-        notes: clientEdit.notes || null,
-        location_id: clientEdit.location_id || null,
-        is_whatsapp: !!clientEdit.is_whatsapp,
-        preferred_channel: clientEdit.preferred_channel || 'telefone',
-        emergency_contact_name: clientEdit.emergency_contact_name || null,
-        emergency_contact_phone: clientEdit.emergency_contact_phone || null,
-        preferred_staff_profile_id: clientEdit.preferred_staff_profile_id || null,
-        accessibility_notes: clientEdit.accessibility_notes || null,
-        general_notes: clientEdit.general_notes || null,
-        marketing_source_code: clientEdit.marketing_source_code || null,
-        marketing_source_other: clientEdit.marketing_source_other || null,
-        birth_date: clientEdit.birth_date ? format(clientEdit.birth_date, 'yyyy-MM-dd') : null,
-      }).eq('id', clientEdit.id);
-      if (error) throw error;
+      const { data: clientUpdateResult, error: clientUpdateFnError } = await supabase.functions.invoke(
+        'admin-manage-client',
+        {
+          body: {
+            action: 'update',
+            client_id: clientEdit.id,
+            payload: {
+              name: clientEdit.name,
+              email: clientEdit.email || null,
+              phone: clientEdit.phone || null,
+              address: clientEdit.address || null,
+              notes: clientEdit.notes || null,
+              location_id: clientEdit.location_id || null,
+              is_whatsapp: !!clientEdit.is_whatsapp,
+              preferred_channel: clientEdit.preferred_channel || 'telefone',
+              emergency_contact_name: clientEdit.emergency_contact_name || null,
+              emergency_contact_phone: clientEdit.emergency_contact_phone || null,
+              preferred_staff_profile_id: clientEdit.preferred_staff_profile_id || null,
+              accessibility_notes: clientEdit.accessibility_notes || null,
+              general_notes: clientEdit.general_notes || null,
+              marketing_source_code: clientEdit.marketing_source_code || null,
+              marketing_source_other: clientEdit.marketing_source_other || null,
+              birth_date: clientEdit.birth_date ? format(clientEdit.birth_date, 'yyyy-MM-dd') : null,
+            },
+          },
+        },
+      );
+      if (clientUpdateFnError || !clientUpdateResult?.ok) {
+        throw new Error(clientUpdateResult?.error ?? clientUpdateFnError?.message ?? 'Unknown error');
+      }
       // Update local state
       setClients(prev => prev.map(c => c.id === clientEdit.id ? { ...c, name: clientEdit.name, email: clientEdit.email, phone: clientEdit.phone } as any : c));
       if (selectedClient?.id === clientEdit.id) {
@@ -605,8 +616,13 @@ const AdminManualBooking = () => {
         // keep text fallback for display if no id chosen
         breed: petEdit.breed_id ? (breedOptions.find(b => b.id === petEdit.breed_id)?.name || petEdit.breed) : (petEdit.breed || null),
       };
-      const { error } = await supabase.from('pets').update(payload).eq('id', petEdit.id);
-      if (error) throw error;
+      const { data: petUpdateResult, error: petUpdateFnError } = await supabase.functions.invoke(
+        'admin-manage-pet',
+        { body: { action: 'update', pet_id: petEdit.id, payload } },
+      );
+      if (petUpdateFnError || !petUpdateResult?.ok) {
+        throw new Error(petUpdateResult?.error ?? petUpdateFnError?.message ?? 'Unknown error');
+      }
       // Refresh local list for current client
       if (selectedClient) {
         await loadPets(selectedClient.id);

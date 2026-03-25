@@ -122,39 +122,21 @@ export class AdminRegistrationMonitor {
     }
   }
 
-  private async verifyAdminRegistration(userId: string, code: string): Promise<{ success: boolean; error?: string }> {
+  private async verifyAdminRegistration(_userId: string, code: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // Check user_roles
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .eq('role', 'admin');
+      // user_id comes from the verified JWT inside the Edge Function — never passed in the body.
+      const { data, error } = await supabase.functions.invoke('admin-get-registration-status', {
+        body: { code },
+      });
 
-      if (rolesError || !roles || roles.length === 0) {
-        return { success: false, error: 'Role de administrador não foi atribuída' };
+      if (error) {
+        return { success: false, error: `Erro na verificação: ${error.message}` };
       }
-
-      // Check admin_profiles
-      const { data: profile, error: profileError } = await supabase
-        .from('admin_profiles')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-      if (profileError || !profile) {
-        return { success: false, error: 'Perfil de administrador não foi criado' };
+      if (!data?.ok) {
+        return { success: false, error: data?.error ?? 'Erro desconhecido na verificação' };
       }
-
-      // Check admin_registration_codes
-      const { data: codeRecord, error: codeError } = await supabase
-        .from('admin_registration_codes')
-        .select('is_used, used_by')
-        .eq('code', code)
-        .single();
-
-      if (codeError || !codeRecord || !codeRecord.is_used || codeRecord.used_by !== userId) {
-        return { success: false, error: 'Código não foi marcado como usado' };
+      if (!data.verified) {
+        return { success: false, error: data.error ?? 'Verificação falhou' };
       }
 
       return { success: true };
