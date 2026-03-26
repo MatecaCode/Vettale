@@ -8,12 +8,20 @@ Update it as new patterns are established or rules change.
 
 ## Branch Workflow
 
+> **CRITICAL — Claude must never commit or push. Ever.**
+>
+> 1. Claude writes code changes to the worktree files only
+> 2. Developer validates the changes by running `npm run dev` on localhost
+> 3. Developer commits and pushes to the branch themselves via GitHub Desktop
+> 4. Developer merges to `main` when satisfied
+>
+> Claude's job stops at step 1. No exceptions. Never run `git add`, `git commit`, or `git push`
+> unless the developer explicitly types "please commit" or "commit this" in chat.
+
 - All feature/security work happens on a **dedicated branch** (e.g. `security-batch-3`)
-- Claude commits to that branch only — **never directly to `main`**
-- The developer reviews the diff in **GitHub Desktop** (add the worktree path as a local repo):
+- The worktree path for GitHub Desktop:
   `C:\Users\Mathe\OneDrive\Documents\GitHub\Vettale\.claude\worktrees\hardcore-goldberg`
-- Developer runs `npm run dev` locally to smoke-test before merging
-- Only after explicit developer approval does anything go to `main`
+- Only after the developer's explicit approval does anything go to `main`
 
 ---
 

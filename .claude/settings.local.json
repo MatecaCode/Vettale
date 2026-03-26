@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(grep -r \"CREATE POLICY.*clients\\\\|ON.*clients\\\\|ENABLE ROW LEVEL SECURITY\" /c/Users/Mathe/OneDrive/Documents/GitHub/Vettale/.claude/worktrees/hardcore-goldberg/supabase/migrations/*.sql)",
+      "Bash(grep -A 5 \"CREATE POLICY.*ON public.clients\\\\|CREATE POLICY.*ON public.pets\" /c/Users/Mathe/OneDrive/Documents/GitHub/Vettale/.claude/worktrees/hardcore-goldberg/supabase/migrations/*.sql)",
+      "Bash(grep -n \"CREATE POLICY\" /c/Users/Mathe/OneDrive/Documents/GitHub/Vettale/.claude/worktrees/hardcore-goldberg/supabase/migrations/*.sql)"
+    ]
+  }
+}
