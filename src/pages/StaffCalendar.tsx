@@ -209,6 +209,14 @@ const StaffCalendar: React.FC = () => {
   };
 
   // Availability management functions
+  const callFn = async (action: string, params: Record<string, unknown>) => {
+    const { data, error } = await supabase.functions.invoke('staff-manage-availability', {
+      body: { action, ...params },
+    });
+    if (error || !data?.ok) throw new Error(data?.error ?? error?.message ?? 'Unknown error');
+    return data;
+  };
+
   const generateClientFacingSlots = () => {
     const isSaturday = availabilityDate ? availabilityDate.getDay() === 6 : false; // 6 = Saturday
     return generateClientTimeSlots(isSaturday).map(slot => formatTimeSlot(slot));
@@ -220,14 +228,9 @@ const StaffCalendar: React.FC = () => {
     try {
       setAvailabilityLoading(true);
       const dateStr = format(availabilityDate, 'yyyy-MM-dd');
-      
-      const { data: availability, error } = await supabase
-        .from('staff_availability')
-        .select('time_slot, available')
-        .eq('staff_profile_id', staffProfile.id)
-        .eq('date', dateStr);
 
-      if (error) throw error;
+      const result = await callFn('get_availability', { date: dateStr });
+      const availability = result.data;
 
       const clientSlots = generateClientFacingSlots();
       
@@ -266,21 +269,10 @@ const StaffCalendar: React.FC = () => {
       const isSaturday = availabilityDate ? availabilityDate.getDay() === 6 : false; // 6 = Saturday
       const backendSlots = getRequiredBackendSlots(`${timeSlot}:00`, 30, isSaturday);
 
-      const promises = backendSlots.map(backendSlot => 
-        supabase
-          .from('staff_availability')
-          .update({ available: isAvailable })
-          .eq('staff_profile_id', staffProfile.id)
-          .eq('date', dateStr)
-          .eq('time_slot', backendSlot)
-      );
-
-      const results = await Promise.all(promises);
-      const hasError = results.some(result => result.error);
-
-      if (hasError) {
-        throw new Error('Failed to update some availability slots');
-      }
+      await callFn('update_slots', {
+        date: dateStr,
+        slots: backendSlots.map(s => ({ time_slot: s, available: isAvailable })),
+      });
 
       setTimeSlots(prevSlots =>
         prevSlots.map(slot =>
@@ -313,21 +305,10 @@ const StaffCalendar: React.FC = () => {
         allBackendSlots.push(...backendSlots);
       });
 
-      const promises = allBackendSlots.map(backendSlot => 
-        supabase
-          .from('staff_availability')
-          .update({ available: false })
-          .eq('staff_profile_id', staffProfile.id)
-          .eq('date', dateStr)
-          .eq('time_slot', backendSlot)
-      );
-
-      const results = await Promise.all(promises);
-      const hasError = results.some(result => result.error);
-
-      if (hasError) {
-        throw new Error('Failed to update some availability slots');
-      }
+      await callFn('update_slots', {
+        date: dateStr,
+        slots: allBackendSlots.map(s => ({ time_slot: s, available: false })),
+      });
 
       setTimeSlots(prevSlots =>
         prevSlots.map(slot => ({ ...slot, status: 'unavailable' as AvailabilityStatus }))
@@ -353,21 +334,10 @@ const StaffCalendar: React.FC = () => {
         allBackendSlots.push(...backendSlots);
       });
 
-      const promises = allBackendSlots.map(backendSlot => 
-        supabase
-          .from('staff_availability')
-          .update({ available: true })
-          .eq('staff_profile_id', staffProfile.id)
-          .eq('date', dateStr)
-          .eq('time_slot', backendSlot)
-      );
-
-      const results = await Promise.all(promises);
-      const hasError = results.some(result => result.error);
-
-      if (hasError) {
-        throw new Error('Failed to update some availability slots');
-      }
+      await callFn('update_slots', {
+        date: dateStr,
+        slots: allBackendSlots.map(s => ({ time_slot: s, available: true })),
+      });
 
       setTimeSlots(prevSlots =>
         prevSlots.map(slot => ({ ...slot, status: 'available' as AvailabilityStatus }))

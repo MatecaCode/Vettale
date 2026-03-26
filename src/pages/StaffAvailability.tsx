@@ -59,6 +59,14 @@ const StaffAvailability = () => {
     }
   };
 
+  const callFn = async (action: string, params: Record<string, unknown>) => {
+    const { data, error } = await supabase.functions.invoke('staff-manage-availability', {
+      body: { action, ...params },
+    });
+    if (error || !data?.ok) throw new Error(data?.error ?? error?.message ?? 'Unknown error');
+    return data;
+  };
+
   const generateClientFacingSlots = () => {
     // Use the 30-minute slots from timeSlotHelpers
     const isSaturday = selectedDate ? selectedDate.getDay() === 6 : false; // 6 = Saturday
@@ -72,14 +80,8 @@ const StaffAvailability = () => {
       setLoading(true);
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       
-      // Get existing availability for the selected date (all 10-minute backend slots)
-      const { data: availability, error } = await supabase
-        .from('staff_availability')
-        .select('time_slot, available')
-        .eq('staff_profile_id', staffProfile.id)
-        .eq('date', dateStr);
-
-      if (error) throw error;
+      const result = await callFn('get_availability', { date: dateStr });
+      const availability = result.data;
 
       // Generate 30-minute client-facing slots
       const clientSlots = generateClientFacingSlots();
@@ -124,26 +126,10 @@ const StaffAvailability = () => {
       const isSaturday = selectedDate ? selectedDate.getDay() === 6 : false; // 6 = Saturday
       const backendSlots = getRequiredBackendSlots(`${timeSlot}:00`, 30, isSaturday);
 
-      // Update all backend slots for this 30-minute period
-      const promises = backendSlots.map(backendSlot => 
-        supabase
-          .from('staff_availability')
-          .upsert({
-            staff_profile_id: staffProfile.id,
-            date: dateStr,
-            time_slot: backendSlot,
-            available: isAvailable,
-          }, {
-            onConflict: 'staff_profile_id,date,time_slot'
-          })
-      );
-
-      const results = await Promise.all(promises);
-      const hasError = results.some(result => result.error);
-
-      if (hasError) {
-        throw new Error('Failed to update some availability slots');
-      }
+      await callFn('upsert_slots', {
+        date: dateStr,
+        slots: backendSlots.map(s => ({ time_slot: s, available: isAvailable })),
+      });
 
       // Update local state
       setTimeSlots(prevSlots =>
@@ -199,26 +185,10 @@ const StaffAvailability = () => {
         allBackendSlots.push(...backendSlots);
       });
 
-      // Update all backend slots to unavailable
-      const promises = allBackendSlots.map(backendSlot => 
-        supabase
-          .from('staff_availability')
-          .upsert({
-            staff_profile_id: staffProfile.id,
-            date: dateStr,
-            time_slot: backendSlot,
-            available: false,
-          }, {
-            onConflict: 'staff_profile_id,date,time_slot'
-          })
-      );
-
-      const results = await Promise.all(promises);
-      const hasError = results.some(result => result.error);
-
-      if (hasError) {
-        throw new Error('Failed to update some availability slots');
-      }
+      await callFn('upsert_slots', {
+        date: dateStr,
+        slots: allBackendSlots.map(s => ({ time_slot: s, available: false })),
+      });
 
       // Update local state - mark all slots as unavailable
       setTimeSlots(prevSlots =>
