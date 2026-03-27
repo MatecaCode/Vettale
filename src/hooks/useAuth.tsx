@@ -58,7 +58,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuthError(null);
   };
 
-  const fetchUserRoles = async (_userId: string) => {
+  // Returns the roles array on success, or null on failure.
+  // Callers must not overwrite existing roles on a null result.
+  const fetchUserRoles = async (_userId: string): Promise<string[] | null> => {
     // user_id comes from the verified JWT inside the Edge Function — not passed in the body.
     try {
       log.debug('Fetching user roles via Edge Function');
@@ -73,17 +75,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (error || !data?.ok) {
         log.error('Failed to fetch user roles:', error ?? data?.error);
-        setAuthError(`Erro ao buscar roles do usuário: ${error?.message ?? data?.error}`);
-        return ['client'];
+        return null; // Don't overwrite existing roles on transient failure
       }
 
-      const roles: string[] = data.data?.roles ?? ['client'];
+      const roles: string[] = data.data?.roles ?? [];
       log.debug('User roles fetched:', roles);
       return roles;
     } catch (error) {
       console.error('💥 Error fetching user roles:', error);
-      setAuthError('Erro ao buscar roles do usuário');
-      return ['client'];
+      return null; // Don't overwrite existing roles on transient failure
     }
   };
 
@@ -93,12 +93,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshUserRoles = async () => {
     if (!user) return;
-    
+
     try {
       console.log('🔄 Manually refreshing user roles for:', user.id);
       const roles = await fetchUserRoles(user.id);
-      setUserRoles(roles);
-      console.log('✅ User roles refreshed:', roles);
+      if (roles !== null) {
+        setUserRoles(roles);
+        console.log('✅ User roles refreshed:', roles);
+      }
     } catch (error) {
       console.error('❌ Error refreshing user roles:', error);
       setAuthError('Erro ao atualizar roles do usuário');
@@ -107,16 +109,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const forceRefreshUserRoles = async () => {
     if (!user) return;
-    
+
     try {
       console.log('🔄🔄 FORCE refreshing user roles for:', user.id);
-      // Clear current roles first
       setUserRoles([]);
-      // Wait a bit then fetch fresh
       setTimeout(async () => {
         const roles = await fetchUserRoles(user.id);
-        setUserRoles(roles);
-        console.log('✅✅ User roles force refreshed:', roles);
+        if (roles !== null) {
+          setUserRoles(roles);
+          console.log('✅✅ User roles force refreshed:', roles);
+        }
       }, 100);
     } catch (error) {
       console.error('❌❌ Error force refreshing user roles:', error);
@@ -185,37 +187,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUser(initialSession.user);
           // Frontend safety net: ensure client row exists after we have a session
           ensureClientRow(initialSession.user);
-          
-          // Fetch roles with error handling and retry logic
-          const fetchRolesWithRetry = async (attempt: number = 1): Promise<string[]> => {
-            try {
-              const roles = await fetchUserRoles(initialSession.user.id);
-              return roles;
-            } catch (error) {
-              if (attempt < maxRetries) {
-                console.warn(`⚠️ Role fetch attempt ${attempt} failed, retrying...`);
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
-                return fetchRolesWithRetry(attempt + 1);
-              } else {
-                console.error('❌ All role fetch attempts failed');
-                setAuthError('Erro ao buscar roles do usuário após múltiplas tentativas');
-                return ['client']; // Final fallback
-              }
-            }
-          };
-
-          try {
-            const roles = await fetchRolesWithRetry();
-            if (mounted) {
-              setUserRoles(roles);
-            }
-          } catch (roleError) {
-            console.error('❌ Role fetch failed:', roleError);
-            if (mounted) {
-              setUserRoles(['client']); // Fallback
-              setAuthError('Erro ao buscar roles do usuário');
-            }
-          }
+          // Roles are fetched when SIGNED_IN fires — JWT is not yet accepted
+          // by the Edge Function auth layer at INITIAL_SESSION time.
         } else if (mounted) {
           setSession(null);
           setUser(null);
@@ -258,23 +231,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             ensureClientRow(session.user);
           }
           
-          // Fetch roles in background with timeout and retry
-          setTimeout(async () => {
-            if (mounted) {
-              try {
+          // Only fetch roles on SIGNED_IN — JWT is stable and accepted by Edge Functions at this point.
+          // INITIAL_SESSION and TOKEN_REFRESHED are skipped (JWT not yet stable / roles unchanged).
+          if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+            setTimeout(async () => {
+              if (!mounted) return;
+              const fetchWithRetry = async (attempt: number = 1): Promise<void> => {
                 const roles = await fetchUserRoles(session.user.id);
-                if (mounted) {
-                  setUserRoles(roles);
+                if (roles !== null) {
+                  if (mounted) setUserRoles(roles);
+                  return;
                 }
-              } catch (error) {
-                console.error('❌ Background role fetch failed:', error);
-                if (mounted) {
-                  setUserRoles(['client']);
-                  setAuthError('Erro ao buscar roles em background');
+                if (attempt < maxRetries) {
+                  console.warn(`⚠️ Role fetch attempt ${attempt} failed, retrying...`);
+                  await new Promise(r => setTimeout(r, 1000 * attempt));
+                  await fetchWithRetry(attempt + 1);
+                  return;
                 }
-              }
-            }
-          }, 0);
+                console.error('❌ All role fetch attempts failed');
+                if (mounted) setUserRoles(['client']); // fallback only after exhausting retries on stable session
+              };
+              await fetchWithRetry();
+            }, 200); // 200ms: lets the session propagate to Supabase's Edge Function auth layer
+          }
         } else {
           setSession(null);
           setUser(null);

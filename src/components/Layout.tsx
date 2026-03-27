@@ -4,7 +4,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Navigation from './Navigation';
 import Footer from './Footer';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { log } from '@/utils/logger';
 
 interface LayoutProps {
@@ -23,14 +22,11 @@ const Layout = ({ children }: LayoutProps) => {
     
     log.debug('Layout - User role:', userRole, 'Current path:', location.pathname);
     
-    // Check if user is staff and redirect to staff dashboard
-    const checkStaffRedirect = async () => {
+    // Check if user is staff and redirect to staff dashboard.
+    // userRole comes from the JWT-validated Edge Function — no DB call needed.
+    const checkStaffRedirect = () => {
       if (location.pathname !== '/') return;
-      
-      const { data: profile } = await supabase.from('staff_profiles')
-        .select('id').eq('user_id', user.id).single();
-      
-      if (profile || userRole === 'groomer' || userRole === 'vet') {
+      if (userRole === 'staff' || userRole === 'groomer' || userRole === 'vet') {
         navigate('/staff-dashboard');
       }
     };

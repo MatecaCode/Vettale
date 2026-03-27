@@ -225,7 +225,8 @@ const Navigation = () => {
                         </p>
                         {userRole && (
                           <p className="text-xs leading-none text-muted-foreground capitalize">
-                            {userRole === 'admin' ? 'Administrador' : 
+                            {userRole === 'admin' ? 'Administrador' :
+                             userRole === 'staff' ? 'Funcionário' :
                              userRole === 'groomer' ? 'Tosador' :
                              userRole === 'vet' ? 'Veterinário' : 'Cliente'}
                           </p>
