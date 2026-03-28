@@ -3,7 +3,6 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { adminRegistrationMonitor } from '@/utils/adminRegistrationMonitor';
 
 const AuthCallback = () => {
   const navigate = useNavigate();
@@ -56,46 +55,6 @@ const AuthCallback = () => {
           
           // Log the metadata
           console.log("✅ Metadata:", user?.user_metadata);
-          
-          // Check for admin registration code
-          const adminCode = user?.user_metadata?.admin_registration_code;
-          console.log("✅ Admin code found:", adminCode);
-          
-          // Process admin registration if code is present
-          if (adminCode) {
-            console.log("🔄 Processing admin registration for user:", user.id);
-            console.log("🔄 Admin code:", adminCode);
-            
-            try {
-              // Use the admin registration monitor for comprehensive handling
-              const success = await adminRegistrationMonitor.monitorAdminRegistration(user.id, adminCode);
-              
-              if (success) {
-                console.log("✅ Successfully applied admin registration");
-                toast.success('Registro de administrador processado com sucesso!');
-              } else {
-                console.error("❌ Admin registration failed");
-                const status = adminRegistrationMonitor.getStatus();
-                
-                // Show retry button if retryable
-                if (status.retryCount < 3) {
-                  toast.error(`Erro no registro: ${status.error}`, {
-                    action: {
-                      label: 'Tentar Novamente',
-                      onClick: () => adminRegistrationMonitor.retryAdminRegistration(),
-                    },
-                  });
-                } else {
-                  toast.error(`Erro no registro: ${status.error}`);
-                }
-              }
-            } catch (adminError) {
-              console.error("❌ Exception during admin registration:", adminError);
-              toast.error('Erro ao processar registro de administrador.');
-            }
-          } else {
-            console.log("ℹ️ No admin code found in metadata - user is not an admin");
-          }
           
           toast.success('Autenticação realizada com sucesso!');
           

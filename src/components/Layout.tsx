@@ -28,7 +28,7 @@ const Layout = ({ children }: LayoutProps) => {
       if (location.pathname !== '/') return;
       
       const { data: profile } = await supabase.from('staff_profiles')
-        .select('id').eq('user_id', user.id).single();
+        .select('id').eq('user_id', user.id).maybeSingle();
       
       if (profile || userRole === 'groomer' || userRole === 'vet') {
         navigate('/staff-dashboard');

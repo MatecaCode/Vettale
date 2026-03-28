@@ -4,8 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
-import { log } from '@/utils/logger';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -22,58 +20,7 @@ const Navigation = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Display name shown in the user dropdown; prefer server-side role name (user_roles.name)
-  const [displayName, setDisplayName] = React.useState<string>('Usuário');
-
-  // Check if user is staff and get their photo
-  const [staffPhotoUrl, setStaffPhotoUrl] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!user) {
-      setDisplayName('Usuário');
-      setStaffPhotoUrl(null);
-      return;
-    }
-
-    // Set display name from metadata immediately (synchronous — no network wait).
-    // This ensures the UI is never blank while the Edge Function responds.
-    const metaName = (user.user_metadata?.name || '').toString().trim();
-    if (metaName) setDisplayName(metaName);
-
-    // Fetch authoritative context from the server (name, role, photo_url).
-    // Failures are silent — the metadata fallback above keeps the UI intact.
-    supabase.functions
-      .invoke('get-current-user-context')
-      .then(({ data }) => {
-        if (!data?.ok) return;
-        const { name, photo_url } = data.data ?? {};
-        if (name) setDisplayName(name);
-        setStaffPhotoUrl(photo_url ?? null);
-      })
-      .catch(() => { /* keep defaults */ });
-
-    // Realtime: update display name when user_roles.name changes (e.g. claim completes).
-    const rolesChannel = supabase
-      .channel('user_roles_name_updates')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_roles', filter: `user_id=eq.${user.id}` }, (payload) => {
-        const nextName = (payload.new as any)?.name?.toString().trim();
-        if (nextName) setDisplayName(nextName);
-      })
-      .subscribe();
-
-    // Realtime: update staff photo when staff_profiles row changes.
-    const staffChannel = supabase
-      .channel('staff_profiles_changes')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'staff_profiles', filter: `user_id=eq.${user.id}` }, (payload) => {
-        setStaffPhotoUrl(payload.new?.photo_url ?? null);
-      })
-      .subscribe();
-
-    return () => {
-      rolesChannel.unsubscribe();
-      staffChannel.unsubscribe();
-    };
-  }, [user]);
+  const displayName = user?.user_metadata?.name || user?.email || 'Usuário';
 
   const handleLogout = async () => {
     try {
@@ -199,18 +146,7 @@ const Navigation = () => {
   <DropdownMenuTrigger asChild>
     <Button variant="ghost" className="h-8 w-8 rounded-full">
       <Avatar className="h-8 w-8">
-        <AvatarImage 
-          src={staffPhotoUrl ? `${staffPhotoUrl}?t=${Date.now()}` : undefined}
-          onLoad={() => log.debug('Nav avatar image loaded successfully:', staffPhotoUrl)}
-          onError={(e) => {
-            log.error('Nav avatar image failed to load:', staffPhotoUrl);
-            // Try to load without cache buster as fallback
-            if (e.currentTarget.src.includes('?t=') && staffPhotoUrl) {
-              e.currentTarget.src = staffPhotoUrl;
-            }
-          }}
-          crossOrigin="anonymous"
-        />
+        <AvatarImage />
         <AvatarFallback>
           {user.email?.charAt(0).toUpperCase()}
         </AvatarFallback>

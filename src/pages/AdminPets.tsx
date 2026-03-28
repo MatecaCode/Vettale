@@ -235,24 +235,21 @@ const AdminPets = () => {
     }
 
            try {
-        const { data: result, error: fnError } = await supabase.functions.invoke('admin-manage-pet', {
-          body: {
-            action: 'create',
-            payload: {
-              name: formData.name,
-              breed: selectedBreed?.name || formData.breed,
-              breed_id: selectedBreed?.id || null,
-              size: formData.size,
-              age: formData.age,
-              birth_date: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
-              notes: formData.notes,
-              client_id: formData.client_id,
-            },
-          },
-        });
+        const { error: fnError } = await supabase
+          .from('pets')
+          .insert({
+            name: formData.name,
+            breed: selectedBreed?.name || formData.breed,
+            breed_id: selectedBreed?.id || null,
+            size: formData.size || null,
+            age: formData.age,
+            birth_date: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
+            notes: formData.notes,
+            client_id: formData.client_id,
+          });
 
-      if (fnError || !result?.ok) {
-        console.error('❌ [ADMIN_PETS] Pet creation error:', fnError || result?.error);
+      if (fnError) {
+        console.error('❌ [ADMIN_PETS] Pet creation error:', fnError);
         toast.error('Erro ao criar pet');
         return;
       }
@@ -287,7 +284,7 @@ const AdminPets = () => {
           name: formData.name,
           breed: selectedBreed?.name || formData.breed,
           breed_id: selectedBreed?.id || null,
-          size: formData.size,
+          size: formData.size || null,
           age: formData.age,
           birth_date: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
           notes: formData.notes,
@@ -296,21 +293,18 @@ const AdminPets = () => {
 
        console.log('🔍 [ADMIN_PETS] Update data:', updateData);
 
-       const { data: result, error: fnError } = await supabase.functions.invoke('admin-manage-pet', {
-          body: {
-            action: 'update',
-            pet_id: selectedPet.id,
-            payload: updateData,
-          },
-        });
+       const { error: fnError } = await supabase
+          .from('pets')
+          .update(updateData)
+          .eq('id', selectedPet.id);
 
-      if (fnError || !result?.ok) {
-        console.error('❌ [ADMIN_PETS] Update error:', fnError || result?.error);
+      if (fnError) {
+        console.error('❌ [ADMIN_PETS] Update error:', fnError);
         toast.error('Erro ao atualizar pet');
         return;
       }
 
-      console.log('✅ [ADMIN_PETS] Update successful:', result?.data);
+      console.log('✅ [ADMIN_PETS] Update successful');
       toast.success('Pet atualizado com sucesso');
       setIsEditModalOpen(false);
       setSelectedPet(null);
@@ -324,12 +318,13 @@ const AdminPets = () => {
 
   const handleDeletePet = async (petId: string) => {
     try {
-      const { data: result, error: fnError } = await supabase.functions.invoke('admin-manage-pet', {
-        body: { action: 'delete', pet_id: petId },
-      });
+      const { error: fnError } = await supabase
+        .from('pets')
+        .delete()
+        .eq('id', petId);
 
-      if (fnError || !result?.ok) {
-        console.error('❌ [ADMIN_PETS] Delete error:', fnError || result?.error);
+      if (fnError) {
+        console.error('❌ [ADMIN_PETS] Delete error:', fnError);
         toast.error('Erro ao deletar pet');
         return;
       }

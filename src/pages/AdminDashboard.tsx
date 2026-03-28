@@ -56,11 +56,53 @@ const AdminDashboard = () => {
   const fetchDashboardStats = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke('admin-get-dashboard-stats');
-      if (error || !data?.ok) {
-        throw new Error(data?.error ?? error?.message ?? 'Unknown error');
-      }
-      setStats(data.data);
+      const today = new Date().toISOString().split('T')[0];
+
+      const [
+        { count: totalUsers },
+        { count: totalPets },
+        { count: totalBookings },
+        { count: todayServices },
+        { count: pendingApprovals },
+        { data: staffWithAppointments },
+        { data: todayAppointments },
+        { count: pendingCancellations },
+      ] = await Promise.all([
+        supabase.from('user_roles').select('*', { count: 'exact', head: true }),
+        supabase.from('pets').select('*', { count: 'exact', head: true }),
+        supabase.from('appointments').select('*', { count: 'exact', head: true }),
+        supabase.from('appointments').select('*', { count: 'exact', head: true })
+          .eq('date', today).neq('status', 'cancelled'),
+        supabase.from('appointments').select('*', { count: 'exact', head: true })
+          .eq('status', 'pending'),
+        supabase.from('appointment_staff')
+          .select('staff_profile_id, appointments!inner(date, status)')
+          .eq('appointments.date', today).neq('appointments.status', 'cancelled'),
+        supabase.from('appointments').select('total_price')
+          .eq('date', today).eq('status', 'confirmed'),
+        supabase.from('appointments').select('*', { count: 'exact', head: true })
+          .eq('status', 'cancelled'),
+      ]);
+
+      const staffOnDuty = new Set(
+        (staffWithAppointments ?? []).map(r => r.staff_profile_id)
+      ).size;
+
+      const revenueToday = (todayAppointments ?? []).reduce(
+        (sum, apt: any) => sum + (apt.total_price || 0),
+        0
+      );
+
+      setStats({
+        totalUsers: totalUsers ?? 0,
+        totalPets: totalPets ?? 0,
+        totalBookings: totalBookings ?? 0,
+        todayServices: todayServices ?? 0,
+        pendingApprovals: pendingApprovals ?? 0,
+        staffOnDuty,
+        revenueToday,
+        pendingCancellations: pendingCancellations ?? 0,
+      });
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
       toast.error('Erro ao carregar estatísticas do dashboard');

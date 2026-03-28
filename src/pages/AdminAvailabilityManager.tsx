@@ -49,17 +49,15 @@ const AdminAvailabilityManager = () => {
     }
   }, [selectedDate]);
 
-  const callFn = async (body: Record<string, unknown>) => {
-    const { data, error } = await supabase.functions.invoke('admin-manage-availability', { body });
-    if (error) throw new Error(error.message);
-    if (!data?.ok) throw new Error(data?.error ?? 'Unknown error');
-    return data;
-  };
-
   const fetchStaffProfiles = async () => {
     try {
-      const result = await callFn({ action: 'get_staff' });
-      setStaffProfiles(result.data || []);
+      const { data, error } = await supabase
+        .from('staff_profiles')
+        .select('id, name, can_bathe, can_groom, can_vet, active')
+        .eq('active', true)
+        .order('name');
+      if (error) throw error;
+      setStaffProfiles(data || []);
     } catch (error: any) {
       console.error('Error fetching staff profiles:', error);
       toast.error('Erro ao carregar profissionais');
@@ -70,14 +68,65 @@ const AdminAvailabilityManager = () => {
     setIsLoading(true);
     try {
       const dateStr = format(date, 'yyyy-MM-dd');
-      const result = await callFn({ action: 'get_availability', date: dateStr });
-      setAvailabilitySlots(result.data || []);
+      const { data, error } = await supabase
+        .from('staff_availability')
+        .select('id, staff_profile_id, date, time_slot, available, staff_profiles!inner(name)')
+        .eq('date', dateStr)
+        .order('time_slot');
+      if (error) throw error;
+      const slots = (data || []).map((slot: any) => ({
+        id: slot.id,
+        staff_profile_id: slot.staff_profile_id,
+        date: slot.date,
+        time_slot: slot.time_slot,
+        available: slot.available,
+        staff_name: slot.staff_profiles?.name ?? 'Unknown',
+      }));
+      setAvailabilitySlots(slots);
     } catch (error: any) {
       console.error('Error fetching availability:', error);
       toast.error('Erro ao carregar disponibilidade');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Generates 10-minute slots for a single day (ported from roll-availability Edge Function)
+  const generateSlotsForDay = (
+    staffProfileId: string,
+    dateStr: string,
+    endHour: number,
+  ) => {
+    const slots = [];
+    for (let hour = 9; hour < endHour; hour++) {
+      for (let min = 0; min < 60; min += 10) {
+        slots.push({
+          staff_profile_id: staffProfileId,
+          date: dateStr,
+          time_slot: `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}:00`,
+          available: true,
+        });
+      }
+    }
+    return slots;
+  };
+
+  // Shared update helper — returns affected row count
+  const updateSlots = async (
+    staffId: string,
+    dateStr: string,
+    timeSlots: string[],
+    available: boolean,
+  ): Promise<number> => {
+    const { data, error } = await supabase
+      .from('staff_availability')
+      .update({ available })
+      .eq('staff_profile_id', staffId)
+      .eq('date', dateStr)
+      .in('time_slot', timeSlots)
+      .select('id');
+    if (error) throw error;
+    return data?.length ?? 0;
   };
 
   // Timezone helpers — enforce America/Sao_Paulo for date comparisons
@@ -133,22 +182,9 @@ const AdminAvailabilityManager = () => {
 
   const getDateStr = (): string => format(selectedDate, 'yyyy-MM-dd');
 
-  const toggleAnchorAvailability = async (
-    staffId: string,
-    anchor: string,
-    currentAvailable: boolean
-  ) => {
+  const toggleAnchorAvailability = async (staffId: string, anchor: string, currentAvailable: boolean) => {
     try {
-      const subslots = getSubslotTimesForAnchor(anchor);
-      const dateStr = getDateStr();
-      const result = await callFn({
-        action: 'update_slots',
-        staff_profile_id: staffId,
-        date: dateStr,
-        time_slots: subslots,
-        available: !currentAvailable,
-      });
-      const affected = result.affected ?? 0;
+      const affected = await updateSlots(staffId, getDateStr(), getSubslotTimesForAnchor(anchor), !currentAvailable);
       if (affected > 0) {
         toast.success(`Disponibilidade atualizada (${affected} horários).`);
       } else {
@@ -172,8 +208,23 @@ const AdminAvailabilityManager = () => {
   const generateAvailabilityForStaff = async (staffId: string) => {
     setIsLoading(true);
     try {
-      const result = await callFn({ action: 'generate_availability', staff_profile_id: staffId });
-      toast.success(`Disponibilidade gerada com sucesso! (${result.slots_generated} horários)`);
+      const allSlots: { staff_profile_id: string; date: string; time_slot: string; available: boolean }[] = [];
+      const now = new Date();
+      const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      for (const d = new Date(now); d <= thirtyDaysLater; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        if (dow === 0) continue; // skip Sundays
+        const endHour = dow === 6 ? 12 : 16; // Saturdays end at 12, weekdays at 16
+        allSlots.push(...generateSlotsForDay(staffId, format(d, 'yyyy-MM-dd'), endHour));
+      }
+      const BATCH = 500;
+      for (let i = 0; i < allSlots.length; i += BATCH) {
+        const { error } = await supabase
+          .from('staff_availability')
+          .upsert(allSlots.slice(i, i + BATCH), { onConflict: 'staff_profile_id,date,time_slot' });
+        if (error) throw error;
+      }
+      toast.success(`Disponibilidade gerada com sucesso! (${allSlots.length} horários)`);
       if (selectedDate) fetchAvailabilityForDate(selectedDate);
     } catch (error: any) {
       console.error('Error generating availability:', error);
@@ -355,14 +406,8 @@ const AdminAvailabilityManager = () => {
                           const dateStr = format(selectedDate, 'yyyy-MM-dd');
                           const subslots = getAnchorTimes().flatMap(getSubslotTimesForAnchor);
                           try {
-                            const result = await callFn({
-                              action: 'update_slots',
-                              staff_profile_id: staff.id,
-                              date: dateStr,
-                              time_slots: subslots,
-                              available: true,
-                            });
-                            toast.success(`Dia marcado disponível (${result.affected ?? 0} horários).`);
+                            const affected = await updateSlots(staff.id, dateStr, subslots, true);
+                            toast.success(`Dia marcado disponível (${affected} horários).`);
                             fetchAvailabilityForDate(selectedDate);
                           } catch (err: any) {
                             console.error('[ADMIN_AVAILABILITY] day-available error', err);
@@ -380,14 +425,8 @@ const AdminAvailabilityManager = () => {
                           const dateStr = format(selectedDate, 'yyyy-MM-dd');
                           const subslots = getAnchorTimes().flatMap(getSubslotTimesForAnchor);
                           try {
-                            const result = await callFn({
-                              action: 'update_slots',
-                              staff_profile_id: staff.id,
-                              date: dateStr,
-                              time_slots: subslots,
-                              available: false,
-                            });
-                            toast.success(`Dia marcado indisponível (${result.affected ?? 0} horários).`);
+                            const affected = await updateSlots(staff.id, dateStr, subslots, false);
+                            toast.success(`Dia marcado indisponível (${affected} horários).`);
                             fetchAvailabilityForDate(selectedDate);
                           } catch (err: any) {
                             console.error('[ADMIN_AVAILABILITY] day-unavailable error', err);

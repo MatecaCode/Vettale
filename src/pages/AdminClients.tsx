@@ -116,7 +116,6 @@ const AdminClients = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(50); // guardrail: never auto-fetch >100
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -166,12 +165,12 @@ const AdminClients = () => {
     if (!highlightId) return;
     (async () => {
       try {
-        const { data: fnResult, error: fnError } = await supabase.functions.invoke(
-          'admin-manage-client',
-          { body: { action: 'get_by_id', client_id: highlightId } },
-        );
-        if (fnError || !fnResult?.ok || !fnResult?.data) return;
-        const data = fnResult.data;
+        const { data, error: fnError } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', highlightId)
+          .maybeSingle();
+        if (fnError || !data) return;
         setTimeout(() => {
           // Open after initial data loads
           (openEditModal as any)(data);
@@ -185,7 +184,6 @@ const AdminClients = () => {
   const [selectedBreed, setSelectedBreed] = useState<Breed | undefined>(undefined);
 
   // Data integrity state
-  const [dataIntegrity, setDataIntegrity] = useState<any>(null);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   type ClaimStatus = { linked?: boolean; verified: boolean; invited: boolean; can_invite: boolean };
   const [claimStatusMap, setClaimStatusMap] = useState<Record<string, ClaimStatus>>({});
@@ -198,25 +196,26 @@ const AdminClients = () => {
     return () => clearInterval(id);
   }, []);
 
-  // Load clients, locations and breeds
+  // Load locations and breeds on mount — no auto-fetch of clients
   useEffect(() => {
-    // Initial load: fetch first page only (50 max), never the full table.
     fetchLocations();
     fetchBreeds();
-    checkDataIntegrity();
-    void fetchClientsPage(0, true);
   }, []);
 
-  // Debounce search input (300–500ms window)
+  // Debounce search input (300ms)
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 400);
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
     return () => clearTimeout(t);
   }, [searchTerm]);
 
   // Fire a new search when debounced term or location changes
   useEffect(() => {
-    // Reset page and fetch first page
     setPage(0);
+    if (debouncedSearch.length < 2) {
+      setClients([]);
+      setTotalCount(null);
+      return;
+    }
     void fetchClientsPage(0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, locationFilter]);
@@ -228,49 +227,60 @@ const AdminClients = () => {
     }
   }, [formData.location_id, isCreateModalOpen, isEditModalOpen]);
 
-  // Server-side paginated fetch
+  // Derived: are there more results to load?
+  const hasMore = totalCount !== null && clients.length < totalCount;
+
+  // Server-side paginated fetch — requires 2+ character search term
   const fetchClientsPage = async (targetPage = page, replace = false) => {
     if (!user) return;
+    const term = debouncedSearch;
+    if (term.length < 2) {
+      setClients([]);
+      setTotalCount(null);
+      setPage(0);
+      return;
+    }
     setIsLoading(true);
     try {
       console.log('🔍 [ADMIN_CLIENTS] Fetching clients (paginated)');
-
-      const limit = Math.min(pageSize, 100); // hard ceiling
-      const from = targetPage * limit;
-      const to = from + limit - 1;
-
-      const term = debouncedSearch;
+      const from = targetPage * 10;
+      const to = from + 9;
       const digits = term.replace(/\D/g, '');
+      const isDigitsOnly = digits.length > 0 && digits === term;
 
-      const { data: listResult, error: listFnError } = await supabase.functions.invoke(
-        'admin-manage-client',
-        {
-          body: {
-            action: 'list',
-            page: targetPage,
-            page_size: limit,
-            search: term,
-            location_filter: locationFilter,
-          },
-        },
-      );
+      let listQuery = supabase
+        .from('clients')
+        .select('*, locations(name)', { count: 'exact' })
+        .order('name')
+        .range(from, to);
 
-      if (listFnError || !listResult?.ok) {
-        const msg = listResult?.error ?? listFnError?.message ?? 'Unknown error';
-        console.error('❌ [ADMIN_CLIENTS] list error:', msg);
-        throw new Error(msg);
+      if (isDigitsOnly) {
+        listQuery = listQuery.or(`name.ilike.%${term}%,phone.ilike.%${term}%`);
+      } else {
+        listQuery = listQuery.ilike('name', `%${term}%`);
+      }
+      if (locationFilter !== 'all') {
+        listQuery = listQuery.eq('location_id', locationFilter);
       }
 
-      const clientsWithPetCounts = listResult.data ?? [];
-      const count = listResult.total_count;
+      const { data: rawClients, count, error: listError } = await listQuery;
+      if (listError) {
+        console.error('❌ [ADMIN_CLIENTS] list error:', listError.message);
+        throw new Error(listError.message);
+      }
+
+      const newClients = (rawClients ?? []).map((c: any) => ({
+        ...c,
+        location_name: c.locations?.name ?? null,
+      }));
 
       setTotalCount(typeof count === 'number' ? count : null);
-      setClients(replace ? clientsWithPetCounts : [...clients, ...clientsWithPetCounts]);
+      setClients(replace ? newClients : [...clients, ...newClients]);
       setPage(targetPage);
 
       // After clients load, fetch claim status via admin RPC
-      const clientIds = (clientsWithPetCounts || []).map((c) => c.id);
-      if (clientIds.length === 0) { setClaimStatusMap({}); return; }
+      const clientIds = newClients.map((c) => c.id);
+      if (clientIds.length === 0) { setClaimStatusMap(replace ? {} : (prev => prev)); return; }
       if (loadingClaimRef.current) { if (claimUiDebug) console.info('[CLAIM_RPC] skip (already loading)'); return; }
       loadingClaimRef.current = true;
       try {
@@ -278,7 +288,7 @@ const AdminClients = () => {
           .rpc('admin_get_client_claim_status', { _client_ids: clientIds });
         if (statusError) {
           console.error('[CLAIM_RPC][ERR]', statusError);
-          return; // fail loud, do not retry with different signature
+          return;
         }
         const map: Record<string, ClaimStatus> = {};
         statusRows?.forEach((row: any) => {
@@ -290,10 +300,7 @@ const AdminClients = () => {
             can_invite: !!row.can_invite,
           };
         });
-        setClaimStatusMap(map);
-        if (!statusRows || statusRows.length === 0) {
-          console.warn('[CLAIM_RPC][EMPTY]', { idsCount: clientIds.length });
-        }
+        setClaimStatusMap(prev => replace ? map : { ...prev, ...map });
         if (claimUiDebug) {
           console.info('[CLAIM_RPC] ids', clientIds.length, 'rows', statusRows?.length ?? 0);
         }
@@ -302,7 +309,7 @@ const AdminClients = () => {
       } finally {
         loadingClaimRef.current = false;
       }
-      console.log('📊 [ADMIN_CLIENTS] Clients page loaded:', { page: targetPage, count: clientsWithPetCounts.length, total: count ?? null });
+      console.log('📊 [ADMIN_CLIENTS] Clients page loaded:', { page: targetPage, count: newClients.length, total: count ?? null });
     } catch (error) {
       console.error('❌ [ADMIN_CLIENTS] Error fetching clients:', error);
       toast.error('Erro ao carregar clientes');
@@ -310,6 +317,9 @@ const AdminClients = () => {
       setIsLoading(false);
     }
   };
+
+  // Refresh alias — re-runs current search from page 0
+  const fetchClients = () => void fetchClientsPage(0, true);
 
   const fetchLocations = async () => {
     try {
@@ -383,28 +393,6 @@ const AdminClients = () => {
     }
   };
 
-  const checkDataIntegrity = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('client_data_integrity')
-        .select('*');
-
-      if (error) {
-        console.error('❌ [ADMIN_CLIENTS] Error checking data integrity:', error);
-        return;
-      }
-
-      const integrityMap = data?.reduce((acc: any, item: any) => {
-        acc[item.metric] = parseInt(item.value);
-        return acc;
-      }, {});
-
-      setDataIntegrity(integrityMap);
-    } catch (error) {
-      console.error('❌ [ADMIN_CLIENTS] Error checking data integrity:', error);
-    }
-  };
-
   const handleCleanupOrphanedClients = async () => {
     const confirmed = window.confirm(
       'Esta ação irá limpar registros de clientes órfãos (que referenciam usuários inexistentes). ' +
@@ -449,7 +437,6 @@ const AdminClients = () => {
         toast.success(`${updatedCount} registros órfãos foram limpos com sucesso!`);
         // Refresh data
         fetchClients();
-        checkDataIntegrity();
       } else {
         toast.info('Nenhum registro foi alterado.');
       }
@@ -506,7 +493,6 @@ const AdminClients = () => {
         toast.success(`${deletedCount} registros duplicados de staff foram removidos com sucesso!`);
         // Refresh data
         fetchClients();
-        checkDataIntegrity();
       } else {
         toast.info('Nenhum registro foi alterado.');
       }
@@ -631,17 +617,17 @@ const AdminClients = () => {
       console.log('🔍 [ADMIN_CLIENTS] Creating client with data:', clientDataToInsert);
       
       // Create client record with all Client Profile 2.0 fields
-      const { data: createResult, error: createFnError } = await supabase.functions.invoke(
-        'admin-manage-client',
-        { body: { action: 'create', payload: clientDataToInsert } },
-      );
-      if (createFnError || !createResult?.ok) {
-        const msg = createResult?.error ?? createFnError?.message ?? 'Unknown error';
+      const { data: clientData, error: createError } = await supabase
+        .from('clients')
+        .insert(clientDataToInsert)
+        .select()
+        .single();
+      if (createError) {
+        const msg = createError.message;
         console.error('❌ [ADMIN_CLIENTS] Client creation error:', msg);
         toast.error('Erro ao criar cliente: ' + msg);
         return;
       }
-      const clientData = createResult.data;
 
       console.log('✅ [ADMIN_CLIENTS] Client created successfully:', clientData);
 
@@ -735,36 +721,30 @@ const AdminClients = () => {
     }
 
     try {
-      const { data: updateResult, error: updateFnError } = await supabase.functions.invoke(
-        'admin-manage-client',
-        {
-          body: {
-            action: 'update',
-            client_id: selectedClient.id,
-            payload: {
-              name: formData.name,
-              phone: formData.phone,
-              email: formData.email,
-              address: formData.address,
-              notes: formData.general_notes,
-              location_id: formData.location_id,
-              is_whatsapp: formData.is_whatsapp,
-              preferred_channel: formData.preferred_channel,
-              emergency_contact_name: formData.emergency_contact_name,
-              emergency_contact_phone: formData.emergency_contact_phone,
-              preferred_staff_profile_id: formData.preferred_staff_profile_id === 'none' ? null : formData.preferred_staff_profile_id,
-              accessibility_notes: formData.accessibility_notes,
-              general_notes: formData.general_notes,
-              marketing_source_code: formData.marketing_source_code === 'not_informed' ? null : formData.marketing_source_code,
-              marketing_source_other: formData.marketing_source_other,
-              birth_date: clientBirthDate ? format(clientBirthDate, 'yyyy-MM-dd') : null,
-            },
-          },
-        },
-      );
-      if (updateFnError || !updateResult?.ok) {
-        const msg = updateResult?.error ?? updateFnError?.message ?? 'Unknown error';
-        console.error('❌ [ADMIN_CLIENTS] Update error:', msg);
+      const { error: updateError } = await supabase
+        .from('clients')
+        .update({
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address,
+          notes: formData.general_notes,
+          location_id: formData.location_id,
+          is_whatsapp: formData.is_whatsapp,
+          preferred_channel: formData.preferred_channel,
+          emergency_contact_name: formData.emergency_contact_name,
+          emergency_contact_phone: formData.emergency_contact_phone,
+          preferred_staff_profile_id: formData.preferred_staff_profile_id === 'none' ? null : formData.preferred_staff_profile_id,
+          accessibility_notes: formData.accessibility_notes,
+          general_notes: formData.general_notes,
+          marketing_source_code: formData.marketing_source_code === 'not_informed' ? null : formData.marketing_source_code,
+          marketing_source_other: formData.marketing_source_other,
+          birth_date: clientBirthDate ? format(clientBirthDate, 'yyyy-MM-dd') : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedClient.id);
+      if (updateError) {
+        console.error('❌ [ADMIN_CLIENTS] Update error:', updateError.message);
         toast.error('Erro ao atualizar cliente');
         return;
       }
@@ -1267,35 +1247,6 @@ const AdminClients = () => {
           <p className="text-gray-600 mt-2">Gerencie todos os clientes registrados no sistema</p>
         </div>
 
-        {/* Data Integrity Warning */}
-        {dataIntegrity && dataIntegrity.orphaned_clients > 0 && (
-          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                <div>
-                  <h3 className="font-medium text-yellow-800">
-                    Problema de Integridade de Dados Detectado
-                  </h3>
-                  <p className="text-sm text-yellow-700">
-                    {dataIntegrity.orphaned_clients} cliente(s) com referências órfãs encontrado(s). 
-                    Estes registros referenciam usuários que não existem mais.
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={handleCleanupOrphanedClients}
-                disabled={isCleaningUp}
-                variant="outline"
-                className="text-yellow-700 border-yellow-300 hover:bg-yellow-100"
-              >
-                {isCleaningUp ? 'Limpando...' : 'Limpar Registros'}
-              </Button>
-            </div>
-          </div>
-        )}
-
-
         {/* Toolbar */}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <div className="flex-1 relative">
@@ -1581,25 +1532,23 @@ const AdminClients = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
             <p className="mt-2 text-gray-600">Carregando clientes...</p>
           </div>
+        ) : debouncedSearch.length < 2 ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Digite pelo menos 2 caracteres para buscar
+              </h3>
+            </CardContent>
+          </Card>
         ) : filteredClients.length === 0 ? (
           <Card>
             <CardContent className="text-center py-8">
               <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {debouncedSearch || locationFilter !== 'all' ? 'Nenhum cliente encontrado' : 'Digite para buscar por nome, email ou telefone'}
+                Nenhum cliente encontrado
               </h3>
-              <p className="text-gray-600 mb-4">
-                {debouncedSearch || locationFilter !== 'all' 
-                  ? 'Tente ajustar os filtros de busca' 
-                  : 'Não carregamos todos os clientes automaticamente para manter a performance.'
-                }
-              </p>
-              {!debouncedSearch && locationFilter === 'all' && (
-                <Button onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeiro Cliente
-                </Button>
-              )}
+              <p className="text-gray-600">Tente ajustar os filtros de busca</p>
             </CardContent>
           </Card>
         ) : (
@@ -1796,25 +1745,20 @@ const AdminClients = () => {
               );
             })}
           </div>
-          {/* Pagination / Load More */}
+          {/* Load More */}
           <div className="flex items-center justify-center gap-4 mt-6">
-            <Button
-              variant="outline"
-              disabled={isLoading || page === 0}
-              onClick={() => fetchClientsPage(Math.max(0, page - 1), true)}
-            >
-              Anterior
-            </Button>
             <span className="text-sm text-gray-600">
-              Página {page + 1}{totalCount ? ` • Mostrando ${clients.length} de ${totalCount}` : ''}
+              {totalCount !== null ? `Mostrando ${clients.length} de ${totalCount}` : ''}
             </span>
-            <Button
-              variant="outline"
-              disabled={isLoading || (totalCount !== null && (page + 1) * pageSize >= totalCount)}
-              onClick={() => fetchClientsPage(page + 1, true)}
-            >
-              Próxima
-            </Button>
+            {hasMore && (
+              <Button
+                variant="outline"
+                disabled={isLoading}
+                onClick={() => fetchClientsPage(page + 1, false)}
+              >
+                {isLoading ? 'Carregando...' : 'Carregar mais'}
+              </Button>
+            )}
           </div>
           </>
         )}
