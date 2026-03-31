@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logAction } from '@/utils/actionLogger';
 
 type ServiceStatus = 'not_started' | 'in_progress' | 'completed';
 
@@ -68,6 +69,18 @@ export function ServiceStatusDropdown({
 
       setStatus(next);
       if (refetchAppointments) await Promise.resolve(refetchAppointments());
+
+      if (isAdmin) {
+        void logAction({
+          action_type: 'config_updated',
+          category: 'booking',
+          description: `Status do serviço atualizado para "${next}" — agendamento ID: ${appointmentId}`,
+          link_type: 'booking',
+          link_id: appointmentId,
+          metadata: { newStatus: next },
+        });
+      }
+
       toast.success('Status do serviço atualizado');
     } catch (e: any) {
       console.error('Failed to update service status', e);

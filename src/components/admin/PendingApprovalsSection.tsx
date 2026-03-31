@@ -8,6 +8,7 @@ import { CheckCircle, XCircle, Clock, User, Calendar, PawPrint } from 'lucide-re
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { logAction } from '@/utils/actionLogger';
 
 interface PendingAppointment {
   id: string;
@@ -112,6 +113,17 @@ const PendingApprovalsSection = () => {
       if (error) throw error;
 
       const appointment = pendingAppointments.find(a => a.id === appointmentId);
+
+      void logAction({
+        action_type: newStatus === 'confirmed' ? 'booking_approved' : 'booking_cancelled',
+        category: 'booking',
+        description: newStatus === 'confirmed'
+          ? `Agendamento aprovado para ${appointment?.client?.name ?? 'cliente'}`
+          : `Agendamento rejeitado de ${appointment?.client?.name ?? 'cliente'}`,
+        link_type: 'booking',
+        link_id: appointmentId,
+        metadata: { newStatus, clientName: appointment?.client?.name },
+      });
       
       if (newStatus === 'confirmed') {
         toast.success(`Agendamento de ${appointment?.client?.name} foi aprovado!`, {

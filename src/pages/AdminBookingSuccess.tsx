@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { CheckCircle, ArrowLeft, Calendar, User, PawPrint, Clock, DollarSign, Plus } from 'lucide-react';
 import { toast } from '../hooks/use-toast';
 import { useAuth } from '../hooks/useAuth';
+import { logAction } from '../utils/actionLogger';
 
 interface ServiceStaffAssignment {
   service_name: string;
@@ -310,6 +311,24 @@ const AdminBookingSuccess: React.FC = () => {
         
         console.log('🔧 [ADMIN_BOOKING_SUCCESS] Add-ons inserted successfully');
       }
+
+      const chargeSubject = appointment?.pet?.name
+        ? appointment.client?.user?.full_name
+          ? `${appointment.pet.name} — ${appointment.client.user.full_name}`
+          : appointment.pet.name
+        : appointmentId;
+      void logAction({
+        action_type: 'booking_charge_added',
+        category: 'booking',
+        description: `Cobranças adicionais salvas — ${chargeSubject}`,
+        link_type: 'booking',
+        link_id: appointmentId,
+        metadata: {
+          hasExtraFee: extraFee > 0,
+          extraFee,
+          addonCount: selectedAddons.length,
+        },
+      });
 
       toast({
         title: "Sucesso",

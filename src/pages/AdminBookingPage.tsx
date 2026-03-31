@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { log } from '@/utils/logger';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logAction } from '@/utils/actionLogger';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Check, ChevronsUpDown } from 'lucide-react';
@@ -782,6 +783,18 @@ const AdminBookingPage = () => {
       });
 
       if (error) throw error;
+
+      const petLabel = pets.find(p => p.id === bookingData.petId)?.name ?? bookingData.petId;
+      const clientLabel = clients.find(c => c.user_id === bookingData.clientUserId || c.id === selectedClient)?.name;
+      const bookingSubject = clientLabel ? `${petLabel} — ${clientLabel}` : petLabel;
+      void logAction({
+        action_type: 'booking_created',
+        category: 'booking',
+        description: `Agendamento criado — ${bookingSubject}`,
+        link_type: 'booking',
+        link_id: appointmentId,
+        metadata: { date: bookingData.date?.toISOString?.()?.split('T')[0], time: bookingData.time },
+      });
 
       toast.success('Agendamento criado com sucesso!');
       

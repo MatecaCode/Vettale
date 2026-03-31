@@ -36,6 +36,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { sendStaffSetupEmail, adminDeleteAuthUser } from '@/lib/staffSetup';
+import { logAction } from '@/utils/actionLogger';
 import { FN_SEND_STAFF_INVITE } from '@/lib/functions';
 
 // Interfaces
@@ -358,6 +359,15 @@ const AdminSettings = () => {
       // Staff created successfully
       console.log('✅ [ADMIN_SETTINGS] Staff created successfully:', staffData);
 
+      void logAction({
+        action_type: 'config_updated',
+        category: 'config',
+        description: `Funcionário criado: ${staffData.name}`,
+        link_type: null,
+        link_id: null,
+        metadata: { staffId: staffData.id, email: staffData.email },
+      });
+
       // Send invitation email using Edge Function (like client flow)
       try {
         const { data: { session: inviteSession } } = await supabase.auth.getSession();
@@ -482,6 +492,14 @@ const AdminSettings = () => {
 
       
 
+      void logAction({
+        action_type: 'config_updated',
+        category: 'config',
+        description: `Funcionário editado: ${staffFormData.name}`,
+        link_type: null,
+        link_id: null,
+        metadata: { staffId: selectedStaff.id, email: staffFormData.email },
+      });
       toast.success('Staff atualizado com sucesso');
       setIsEditStaffModalOpen(false);
       setSelectedStaff(null);
@@ -523,6 +541,15 @@ const AdminSettings = () => {
         }
 
         console.log('✅ [ADMIN_SETTINGS] Staff removed from app tables');
+
+        void logAction({
+          action_type: 'config_updated',
+          category: 'config',
+          description: `Funcionário removido: ${staffProfile.name ?? staffId}`,
+          link_type: null,
+          link_id: null,
+          metadata: { staffId, email: staffProfile.email, hadAuthUser: !!(staffProfile.user_id || staffProfile.email) },
+        });
 
         // Delete auth user if it exists (either by user_id or by email)
         if (staffProfile.user_id || staffProfile.email) {

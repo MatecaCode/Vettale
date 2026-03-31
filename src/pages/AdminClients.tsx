@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -43,7 +44,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format, differenceInYears, differenceInMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { logAction } from '@/utils/actionLogger';
 
 interface Client {
   id: string;
@@ -109,6 +111,7 @@ interface Breed {
 
 const AdminClients = () => {
   const { user, session } = useAuth();
+  const [searchParams] = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
@@ -631,6 +634,15 @@ const AdminClients = () => {
 
       console.log('✅ [ADMIN_CLIENTS] Client created successfully:', clientData);
 
+      void logAction({
+        action_type: 'client_created',
+        category: 'client',
+        description: `Cliente criado: ${clientData.name}`,
+        link_type: 'client',
+        link_id: clientData.id,
+        metadata: { email: clientData.email, phone: clientData.phone },
+      });
+
       // Send invitation email using Edge Function
       try {
         // Use a fresh access token
@@ -749,6 +761,13 @@ const AdminClients = () => {
         return;
       }
 
+      void logAction({
+        action_type: 'client_edited',
+        category: 'client',
+        description: `Cliente editado: ${formData.name}`,
+        link_type: 'client',
+        link_id: selectedClient.id,
+      });
       toast.success('Cliente atualizado com sucesso');
       setIsEditModalOpen(false);
       setSelectedClient(null);
@@ -813,6 +832,19 @@ const AdminClients = () => {
         clientRecord: summary.client_deleted
       });
 
+      void logAction({
+        action_type: 'client_deleted',
+        category: 'client',
+        description: `Cliente excluído: ${deletionResult.client_name}`,
+        link_type: null,
+        link_id: null,
+        metadata: {
+          clientId: clientId,
+          clientName: deletionResult.client_name,
+          clientEmail: deletionResult.client_email,
+          hadAuthUser: !!(deletionResult.user_id || clientEmailBefore),
+        },
+      });
       toast.success(`Cliente "${deletionResult.client_name}" deletado completamente!`);
       fetchClients();
       
@@ -1091,6 +1123,14 @@ const AdminClients = () => {
         return;
       }
 
+      void logAction({
+        action_type: 'pet_created',
+        category: 'pet',
+        description: `Pet criado: ${petData.name} (dono: ${selectedClientForPets.name})`,
+        link_type: 'pet',
+        link_id: petData.id,
+        metadata: { clientId: selectedClientForPets.id, breed: petData.breed, size: petData.size },
+      });
       toast.success('Pet criado com sucesso');
       setIsCreatePetModalOpen(false);
       resetPetForm();
@@ -1206,6 +1246,24 @@ const AdminClients = () => {
     setEmailCheckError('');
     setIsEditModalOpen(true);
   };
+
+  // Deep-link: ?id= param from action log "Ver" button
+  useEffect(() => {
+    const clientId = searchParams.get('id');
+    if (!clientId || !user) return;
+
+    supabase
+      .from('clients')
+      .select('*')
+      .eq('id', clientId)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        openEditModal(data as Client);
+      });
+    // Run once on mount only (openEditModal is stable)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const formatDate = (dateString: string) => {
     try {

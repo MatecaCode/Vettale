@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logAction } from '@/utils/actionLogger';
 import { ptBR } from 'date-fns/locale';
 import { format } from 'date-fns';
 import { 
@@ -552,6 +553,13 @@ const AdminManualBooking = () => {
         setSelectedClient(updated);
         validateSelectedClient(updated);
       }
+      void logAction({
+        action_type: 'client_edited',
+        category: 'client',
+        description: `Cliente editado: ${clientEdit.name}`,
+        link_type: 'client',
+        link_id: clientEdit.id,
+      });
       toast.success('Cliente atualizado');
       setIsClientEditOpen(false);
     } catch {
@@ -627,6 +635,13 @@ const AdminManualBooking = () => {
           }
         }
       }
+      void logAction({
+        action_type: 'pet_edited',
+        category: 'pet',
+        description: `Pet editado: ${petEdit.name}`,
+        link_type: 'pet',
+        link_id: petEdit.id,
+      });
       toast.success('Pet atualizado');
       setIsPetEditOpen(false);
     } catch {
@@ -1069,6 +1084,15 @@ const AdminManualBooking = () => {
       }
 
       console.log('✅ [ADMIN_MANUAL_BOOKING] Booking created successfully:', appointmentId);
+
+      void logAction({
+        action_type: isOverride ? 'booking_overridden' : 'booking_created',
+        category: 'booking',
+        description: `Agendamento manual criado para ${selectedClient?.name ?? 'cliente'} — pet: ${selectedPet?.name ?? 'não informado'}`,
+        link_type: 'booking',
+        link_id: appointmentId,
+        metadata: { isOverride, petId: bookingData.petId, date: bookingData.date, time: bookingData.time },
+      });
 
       toast.success('Agendamento criado com sucesso!');
       // Redirect to add-ons confirmation page

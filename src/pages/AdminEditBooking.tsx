@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logAction } from '@/utils/actionLogger';
 import { CalendarIcon, Edit, DollarSign, FileText, ArrowLeft, Loader2, AlertCircle, X, AlertTriangle, Plus, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -646,6 +647,26 @@ const AdminEditBooking = () => {
       await loadServiceStaffAssignments(editData.appointmentId);
       
       console.log('✅ [ADMIN_EDIT_BOOKING] Successfully edited booking');
+
+      const apptSubject = appointmentDetails?.pet_name
+        ? appointmentDetails.client_name
+          ? `${appointmentDetails.pet_name} — ${appointmentDetails.client_name}`
+          : appointmentDetails.pet_name
+        : editData.appointmentId;
+      void logAction({
+        action_type: editData.forceOverride ? 'booking_overridden' : 'booking_edited',
+        category: 'booking',
+        description: `Agendamento editado — ${apptSubject}${editData.forceOverride ? ' (override aplicado)' : ''}`,
+        link_type: 'booking',
+        link_id: editData.appointmentId,
+        metadata: {
+          newDate: editData.newDate,
+          newTime: editData.newTime,
+          forceOverride: editData.forceOverride,
+          editReason: editData.editReason,
+          hasAddon: editData.selectedAddon !== 'none',
+        },
+      });
       
       // Show appropriate success message
       if (editData.forceOverride) {

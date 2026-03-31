@@ -581,6 +581,8 @@ const AdminAppointments = () => {
             currentTime={appointment.time}
             currentExtraFee={appointment.extra_fee}
             currentNotes={appointment.notes}
+            petName={appointment.pet_name}
+            clientName={appointment.client_name}
           />
           
           {/* Debug Link - Only show in debug mode */}
@@ -953,6 +955,8 @@ const AdminAppointments = () => {
                     status={selectedAppointment.status}
                     onCancel={refreshAppointments}
                     onConfirm={refreshAppointments}
+                    petName={selectedAppointment.pet_name}
+                    clientName={selectedAppointment.client_name}
                   />
                 </div>
               </div>

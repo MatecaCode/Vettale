@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { X, CheckCircle, Edit } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { logAction } from '@/utils/actionLogger';
 
 interface AppointmentActionsProps {
   appointmentId: string;
@@ -28,6 +29,8 @@ interface AppointmentActionsProps {
   currentTime?: string;
   currentExtraFee?: number;
   currentNotes?: string;
+  petName?: string;
+  clientName?: string;
 }
 
 const AppointmentActions = ({ 
@@ -40,7 +43,9 @@ const AppointmentActions = ({
   currentDate,
   currentTime,
   currentExtraFee,
-  currentNotes
+  currentNotes,
+  petName,
+  clientName,
 }: AppointmentActionsProps) => {
   const { user, isAdmin } = useAuth();
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -159,6 +164,20 @@ const AppointmentActions = ({
       }
 
       console.log(`[CANCELLATION] Successfully completed atomic cancellation for appointment ${appointmentId}`);
+
+      if (isAdmin) {
+        const subject = petName
+          ? clientName ? `${petName} — ${clientName}` : petName
+          : appointmentId;
+        void logAction({
+          action_type: 'booking_cancelled',
+          category: 'booking',
+          description: `Agendamento cancelado — ${subject}`,
+          link_type: 'booking',
+          link_id: appointmentId,
+          metadata: { isAdminOverride: !!isAdminOverride },
+        });
+      }
       
       toast.success('Agendamento cancelado com sucesso');
       setShowCancelDialog(false);
@@ -192,6 +211,19 @@ const AppointmentActions = ({
       }
 
       console.log(`[CONFIRMATION] Successfully confirmed appointment ${appointmentId}`);
+
+      if (isAdmin) {
+        const subject = petName
+          ? clientName ? `${petName} — ${clientName}` : petName
+          : appointmentId;
+        void logAction({
+          action_type: 'booking_approved',
+          category: 'booking',
+          description: `Agendamento confirmado — ${subject}`,
+          link_type: 'booking',
+          link_id: appointmentId,
+        });
+      }
       
       toast.success('Agendamento confirmado com sucesso');
       setShowConfirmDialog(false);

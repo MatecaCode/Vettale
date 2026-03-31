@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -31,6 +32,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format, differenceInYears, differenceInMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { logAction } from '@/utils/actionLogger';
 
 interface Pet {
   id: string;
@@ -65,6 +67,7 @@ interface Client {
 
 const AdminPets = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [pets, setPets] = useState<Pet[]>([]);
   const [breeds, setBreeds] = useState<Breed[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -238,7 +241,7 @@ const AdminPets = () => {
     }
 
            try {
-        const { error: fnError } = await supabase
+        const { data: newPet, error: fnError } = await supabase
           .from('pets')
           .insert({
             name: formData.name,
@@ -249,7 +252,9 @@ const AdminPets = () => {
             birth_date: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
             notes: formData.notes,
             client_id: formData.client_id,
-          });
+          })
+          .select()
+          .single();
 
       if (fnError) {
         console.error('❌ [ADMIN_PETS] Pet creation error:', fnError);
@@ -257,6 +262,14 @@ const AdminPets = () => {
         return;
       }
 
+      void logAction({
+        action_type: 'pet_created',
+        category: 'pet',
+        description: `Pet criado: ${formData.name}`,
+        link_type: 'pet',
+        link_id: newPet?.id,
+        metadata: { breed: formData.breed, size: formData.size, clientId: formData.client_id },
+      });
       toast.success('Pet criado com sucesso');
       setIsCreateModalOpen(false);
       resetForm();
@@ -308,6 +321,13 @@ const AdminPets = () => {
       }
 
       console.log('✅ [ADMIN_PETS] Update successful');
+      void logAction({
+        action_type: 'pet_edited',
+        category: 'pet',
+        description: `Pet editado: ${formData.name}`,
+        link_type: 'pet',
+        link_id: selectedPet.id,
+      });
       toast.success('Pet atualizado com sucesso');
       setIsEditModalOpen(false);
       setSelectedPet(null);
@@ -320,6 +340,7 @@ const AdminPets = () => {
   };
 
   const handleDeletePet = async (petId: string) => {
+    const petToDelete = pets.find(p => p.id === petId);
     try {
       const { error: fnError } = await supabase
         .from('pets')
@@ -332,6 +353,14 @@ const AdminPets = () => {
         return;
       }
 
+      void logAction({
+        action_type: 'pet_deleted',
+        category: 'pet',
+        description: `Pet excluído: ${petToDelete?.name ?? petId}`,
+        link_type: null,
+        link_id: null,
+        metadata: { petId, petName: petToDelete?.name },
+      });
       toast.success('Pet deletado com sucesso');
       searchPets(searchTerm);
     } catch (error) {
@@ -390,6 +419,33 @@ const AdminPets = () => {
 
     setIsEditModalOpen(true);
   };
+
+  // Deep-link: ?id= param from action log "Ver" button
+  useEffect(() => {
+    const petId = searchParams.get('id');
+    if (!petId || !user) return;
+
+    supabase
+      .from('pets')
+      .select(`
+        id, name, breed, breed_id, size, age, birth_date, notes,
+        created_at, updated_at, client_id, is_first_visit,
+        clients:client_id (name, email)
+      `)
+      .eq('id', petId)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        const pet = {
+          ...data,
+          client_name: (data.clients as any)?.name ?? null,
+          client_email: (data.clients as any)?.email ?? null,
+        } as Pet;
+        openEditModal(pet);
+      });
+    // Run once on mount only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const formatDate = (dateString: string) => {
     try {

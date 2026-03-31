@@ -17,7 +17,8 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  DollarSign
+  DollarSign,
+  ClipboardList
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -95,6 +96,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     {
       title: 'System',
       items: [
+        { title: 'Log de Ações', href: '/admin/action-log', icon: <ClipboardList className="h-5 w-5" /> },
         { title: 'Audit Logs', href: '/admin/logs', icon: <AlertCircle className="h-5 w-5" /> },
         { title: 'Edit Logs', href: '/admin/edit-logs', icon: <FileText className="h-5 w-5" /> },
         { title: 'System Settings', href: '/admin/settings', icon: <Settings className="h-5 w-5" /> },

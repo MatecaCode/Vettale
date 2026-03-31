@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logAction } from '@/utils/actionLogger';
 import { 
   generateAdminTimeSlots, 
   getAdminRequiredBackendSlots, 
@@ -59,6 +60,15 @@ export async function createAdminBooking(
 
     console.log('✅ [ADMIN_BOOKING] Booking created successfully:', appointmentId);
     toast.success('Agendamento criado com sucesso!');
+
+    void logAction({
+      action_type: 'booking_created',
+      category: 'booking',
+      description: `Agendamento criado (admin) — pet ID: ${bookingData.petId}`,
+      link_type: 'booking',
+      link_id: appointmentId,
+      metadata: { date: bookingData.bookingDate, time: bookingData.timeSlot, override: bookingData.overrideConflicts },
+    });
     
     return { success: true, appointmentId };
   } catch (error: any) {

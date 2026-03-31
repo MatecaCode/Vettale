@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { BreedCombobox } from '@/components/BreedCombobox';
+import { logAction } from '@/utils/actionLogger';
 
 // Interfaces
 interface Service {
@@ -197,6 +198,14 @@ const EditServicePricing = () => {
           .eq('id', currentPricing.id);
 
         if (error) throw error;
+        void logAction({
+          action_type: 'price_updated',
+          category: 'config',
+          description: `Preço atualizado para serviço "${service?.name ?? serviceId}" — raça: ${selectedBreed?.name}, porte: ${selectedSize}, novo preço: R$ ${pricingData.price}`,
+          link_type: null,
+          link_id: null,
+          metadata: { serviceId, breedId: selectedBreed?.id, breedName: selectedBreed?.name, size: selectedSize, price: pricingData.price, durationOverride: pricingData.duration_override },
+        });
         toast.success('Preços atualizados com sucesso!');
       } else {
         // Insert new pricing
@@ -205,6 +214,14 @@ const EditServicePricing = () => {
           .insert(pricingData);
 
         if (error) throw error;
+        void logAction({
+          action_type: 'price_updated',
+          category: 'config',
+          description: `Preço criado para serviço "${service?.name ?? serviceId}" — raça: ${selectedBreed?.name}, porte: ${selectedSize}, preço: R$ ${pricingData.price}`,
+          link_type: null,
+          link_id: null,
+          metadata: { serviceId, breedId: selectedBreed?.id, breedName: selectedBreed?.name, size: selectedSize, price: pricingData.price, durationOverride: pricingData.duration_override },
+        });
         toast.success('Preços salvos com sucesso!');
       }
 
@@ -288,6 +305,15 @@ const EditServicePricing = () => {
       }
 
       console.log('✅ [SERVICE_UPDATE] Service update result:', data);
+
+      void logAction({
+        action_type: 'config_updated',
+        category: 'config',
+        description: `Serviço editado: "${service?.name ?? serviceId}"`,
+        link_type: null,
+        link_id: null,
+        metadata: { serviceId, ...updateData },
+      });
 
       // Refresh service data
       await fetchService();
