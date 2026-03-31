@@ -1,14 +1,10 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-
-const cors: HeadersInit = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { corsHeaders as getCors } from '../_shared/cors.ts';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  const origin = req.headers.get('origin');
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCors(origin) });
 
   try {
     const { user_id, email } = await req.json();
@@ -30,7 +26,7 @@ Deno.serve(async (req) => {
       await admin.auth.admin.deleteUser(uid).catch(() => {});
     }
 
-    return new Response(JSON.stringify({ ok: true, user_id: uid ?? null }), { headers: cors });
+    return new Response(JSON.stringify({ ok: true, user_id: uid ?? null }), { headers: getCors(origin) });
   } catch (e) {
     console.error('[ADMIN_DELETE_AUTH] unexpected:', e);
     return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: cors });

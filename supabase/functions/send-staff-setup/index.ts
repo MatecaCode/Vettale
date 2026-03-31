@@ -1,21 +1,17 @@
 // Deno Edge Function - Staff Setup (Reset Password)
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const cors: HeadersInit = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { corsHeaders as getCors } from '../_shared/cors.ts';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  const origin = req.headers.get('origin');
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCors(origin) });
 
   try {
     const { email, staff_profile_id, name } = await req.json();
     if (!email || !staff_profile_id) {
       return new Response(JSON.stringify({ ok: false, error: 'email and staff_profile_id are required' }),
-        { status: 400, headers: cors });
+        { status: 400, headers: getCors(origin) });
     }
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -30,7 +26,7 @@ Deno.serve(async (req) => {
     const { error: resetErr } = await admin.auth.resetPasswordForEmail(email, { redirectTo });
     if (resetErr) {
       console.error('[STAFF_SETUP] resetPasswordForEmail:', resetErr);
-      return new Response(JSON.stringify({ ok: false, error: resetErr.message }), { status: 400, headers: cors });
+      return new Response(JSON.stringify({ ok: false, error: resetErr.message }), { status: 400, headers: getCors(origin) });
     }
 
     // 3) stamp
@@ -38,9 +34,9 @@ Deno.serve(async (req) => {
       .update({ claim_invited_at: new Date().toISOString(), email })
       .eq('id', staff_profile_id);
 
-    return new Response(JSON.stringify({ ok: true, kind: 'reset_password', redirectTo }), { headers: cors });
+    return new Response(JSON.stringify({ ok: true, kind: 'reset_password', redirectTo }), { headers: getCors(origin) });
   } catch (e) {
     console.error('[STAFF_SETUP] unexpected:', e);
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: cors });
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: getCors(origin) });
   }
 });

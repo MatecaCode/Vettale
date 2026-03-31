@@ -865,6 +865,10 @@ export type Database = {
           created_at: string | null
           gender: string | null
           id: string
+          // Added by migration 20260330000000 — Item 23: New Pet Detection Mechanism
+          // If you regenerate types via `supabase gen types`, this field will appear
+          // automatically — do not remove it manually before regenerating.
+          is_first_visit: boolean
           name: string
           notes: string | null
           photo_url: string | null
@@ -882,6 +886,9 @@ export type Database = {
           created_at?: string | null
           gender?: string | null
           id?: string
+          // Do NOT set is_first_visit on insert — DEFAULT TRUE handles it.
+          // Only the trg_flip_first_visit_on_completion trigger may change this field.
+          is_first_visit?: boolean
           name: string
           notes?: string | null
           photo_url?: string | null
@@ -899,6 +906,10 @@ export type Database = {
           created_at?: string | null
           gender?: string | null
           id?: string
+          // Do NOT include is_first_visit in client-side UPDATE payloads.
+          // Column-level REVOKE blocks the authenticated role from writing it directly.
+          // Only the SECURITY DEFINER trigger function (postgres role) may update this.
+          is_first_visit?: boolean
           name?: string
           notes?: string | null
           photo_url?: string | null

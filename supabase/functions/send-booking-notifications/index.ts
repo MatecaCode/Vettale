@@ -2,13 +2,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 import { Resend } from "npm:resend@2.0.0";
+import { corsHeaders as getCors } from '../_shared/cors.ts';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 interface BookingNotificationRequest {
   appointmentId: string;
@@ -24,8 +20,9 @@ interface BookingNotificationRequest {
 }
 
 const handler = async (req: Request): Promise<Response> => {
+  const origin = req.headers.get('origin');
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: getCors(origin) });
   }
 
   try {
@@ -57,75 +54,113 @@ const handler = async (req: Request): Promise<Response> => {
       day: 'numeric'
     });
 
+    const LOGO = "https://vettale.shop/Logo.png";
+
+    const emailShell = (body: string) => `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+      <body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:32px 16px;">
+          <tr><td align="center">
+            <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+              <!-- Header -->
+              <tr>
+                <td style="background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%);padding:28px 32px;text-align:center;">
+                  <img src="${LOGO}" alt="Vettale" height="48" style="display:inline-block;height:48px;max-width:180px;object-fit:contain;" />
+                </td>
+              </tr>
+              <!-- Body -->
+              <tr><td style="padding:32px;text-align:center;">${body}</td></tr>
+              <!-- Footer -->
+              <tr>
+                <td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 32px;text-align:center;">
+                  <p style="margin:0;font-size:13px;color:#94a3b8;">© ${new Date().getFullYear()} Vettale · <a href="https://vettale.shop" style="color:#2563eb;text-decoration:none;">vettale.shop</a></p>
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const detailRow = (label: string, value: string) => `
+      <tr>
+        <td style="padding:8px 12px;font-size:14px;color:#64748b;width:130px;vertical-align:top;">${label}</td>
+        <td style="padding:8px 12px;font-size:14px;color:#1e293b;font-weight:600;">${value}</td>
+      </tr>
+    `;
+
+    const detailsTable = (rows: string) => `
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin:20px 0;">
+        ${rows}
+      </table>
+    `;
+
+    const statusBadge = (text: string, bg: string, color: string) => `
+      <div style="display:inline-block;background:${bg};color:${color};font-size:13px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:0.3px;">${text}</div>
+    `;
+
     // 1. Send email to client
     await resend.emails.send({
-      from: "VetTale <no-reply@vettale.com>",
+      from: "Vettale <no-reply@vettale.com>",
       to: [userEmail],
       subject: "Agendamento Enviado - Aguardando Aprovação",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #2563eb;">Agendamento Enviado com Sucesso!</h1>
-          
-          <p>Olá <strong>${userName}</strong>,</p>
-          
-          <p>Seu agendamento foi recebido e está aguardando aprovação da nossa equipe.</p>
-          
-          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin-top: 0; color: #1f2937;">Detalhes do Agendamento:</h3>
-            <p><strong>Pet:</strong> ${petName}</p>
-            <p><strong>Serviço:</strong> ${serviceName}</p>
-            <p><strong>Data:</strong> ${formattedDate}</p>
-            <p><strong>Horário:</strong> ${time}</p>
-            ${providerName ? `<p><strong>Profissional:</strong> ${providerName}</p>` : ''}
-            ${notes ? `<p><strong>Observações:</strong> ${notes}</p>` : ''}
-          </div>
-          
-          <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0;"><strong>Status:</strong> Aguardando Aprovação</p>
-            <p style="margin: 10px 0 0 0; font-size: 14px;">Nossa equipe analisará sua solicitação e entrará em contato em breve para confirmar o agendamento.</p>
-          </div>
-          
-          <p>Você receberá uma nova notificação assim que o agendamento for aprovado.</p>
-          
-          <p>Atenciosamente,<br>Equipe VetTale</p>
-        </div>
-      `,
+      html: emailShell(`
+        <h2 style="margin:0 0 6px;color:#1e293b;font-size:22px;">Agendamento Enviado! 🐾</h2>
+        <p style="margin:0 0 20px;color:#475569;font-size:15px;">Olá <strong>${userName}</strong>, seu agendamento foi recebido com sucesso.</p>
+
+        ${detailsTable(
+          detailRow("Pet", petName) +
+          detailRow("Serviço", serviceName) +
+          detailRow("Data", formattedDate) +
+          detailRow("Horário", time) +
+          (providerName ? detailRow("Profissional", providerName) : '') +
+          (notes ? detailRow("Observações", notes) : '')
+        )}
+
+        <table cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;width:100%;margin:20px 0;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0 0 4px;font-size:14px;color:#92400e;">
+              ${statusBadge("Aguardando Aprovação", "#fef3c7", "#b45309")}
+            </p>
+            <p style="margin:8px 0 0;font-size:14px;color:#78350f;">Nossa equipe analisará sua solicitação e você receberá uma confirmação em breve.</p>
+          </td></tr>
+        </table>
+
+        <p style="margin:24px 0 0;font-size:14px;color:#64748b;">Atenciosamente,<br><strong style="color:#1e293b;">Equipe Vettale</strong></p>
+      `),
     });
 
     // 2. Send email to provider (if assigned)
     if (providerEmail && providerName) {
       await resend.emails.send({
-        from: "VetTale <no-reply@vettale.com>",
+        from: "Vettale <no-reply@vettale.com>",
         to: [providerEmail],
         subject: "Nova Solicitação de Agendamento",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #2563eb;">Nova Solicitação de Agendamento</h1>
-            
-            <p>Olá <strong>${providerName}</strong>,</p>
-            
-            <p>Você foi selecionado para um novo agendamento que está aguardando aprovação administrativa.</p>
-            
-            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <h3 style="margin-top: 0; color: #1f2937;">Detalhes do Agendamento:</h3>
-              <p><strong>Cliente:</strong> ${userName}</p>
-              <p><strong>Pet:</strong> ${petName}</p>
-              <p><strong>Serviço:</strong> ${serviceName}</p>
-              <p><strong>Data:</strong> ${formattedDate}</p>
-              <p><strong>Horário:</strong> ${time}</p>
-              ${notes ? `<p><strong>Observações:</strong> ${notes}</p>` : ''}
-            </div>
-            
-            <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
-              <p style="margin: 0;"><strong>Ação Necessária:</strong></p>
-              <p style="margin: 10px 0 0 0; font-size: 14px;">Este horário ficará reservado provisoriamente até a aprovação administrativa. Você será notificado quando o agendamento for confirmado.</p>
-            </div>
-            
-            <p>Acesse seu painel para acompanhar este e outros agendamentos.</p>
-            
-            <p>Atenciosamente,<br>Equipe VetTale</p>
-          </div>
-        `,
+        html: emailShell(`
+          <h2 style="margin:0 0 6px;color:#1e293b;font-size:22px;">Nova Solicitação de Agendamento</h2>
+          <p style="margin:0 0 20px;color:#475569;font-size:15px;">Olá <strong>${providerName}</strong>, você foi atribuído a um novo agendamento pendente de aprovação.</p>
+
+          ${detailsTable(
+            detailRow("Cliente", userName) +
+            detailRow("Pet", petName) +
+            detailRow("Serviço", serviceName) +
+            detailRow("Data", formattedDate) +
+            detailRow("Horário", time) +
+            (notes ? detailRow("Observações", notes) : '')
+          )}
+
+          <table cellpadding="0" cellspacing="0" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;width:100%;margin:20px 0;">
+            <tr><td style="padding:16px 20px;">
+              <p style="margin:0 0 4px;font-size:14px;">${statusBadge("Reserva Provisória", "#dbeafe", "#1d4ed8")}</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#1e40af;">Este horário ficará reservado provisoriamente até a confirmação administrativa.</p>
+            </td></tr>
+          </table>
+
+          <p style="margin:24px 0 0;font-size:14px;color:#64748b;">Atenciosamente,<br><strong style="color:#1e293b;">Equipe Vettale</strong></p>
+        `),
       });
     }
 
@@ -145,36 +180,32 @@ const handler = async (req: Request): Promise<Response> => {
       for (const adminUser of adminUsers) {
         if (adminUser.users?.email) {
           await resend.emails.send({
-            from: "VetTale <no-reply@vettale.com>",
+            from: "Vettale <no-reply@vettale.com>",
             to: [adminUser.users.email],
             subject: "Nova Solicitação de Agendamento - Aprovação Necessária",
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h1 style="color: #dc2626;">Nova Solicitação de Agendamento</h1>
-                
-                <p>Uma nova solicitação de agendamento foi recebida e precisa de sua aprovação.</p>
-                
-                <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <h3 style="margin-top: 0; color: #1f2937;">Detalhes da Solicitação:</h3>
-                  <p><strong>Cliente:</strong> ${userName} (${userEmail})</p>
-                  <p><strong>Pet:</strong> ${petName}</p>
-                  <p><strong>Serviço:</strong> ${serviceName}</p>
-                  <p><strong>Data:</strong> ${formattedDate}</p>
-                  <p><strong>Horário:</strong> ${time}</p>
-                  ${providerName ? `<p><strong>Profissional:</strong> ${providerName}</p>` : ''}
-                  ${notes ? `<p><strong>Observações:</strong> ${notes}</p>` : ''}
-                </div>
-                
-                <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0;">
-                  <p style="margin: 0;"><strong>Ação Necessária:</strong></p>
-                  <p style="margin: 10px 0 0 0; font-size: 14px;">Acesse o painel administrativo para aprovar ou rejeitar esta solicitação de agendamento.</p>
-                </div>
-                
-                <p>Acesse o painel administrativo para tomar uma decisão sobre esta solicitação.</p>
-                
-                <p>Atenciosamente,<br>Sistema VetTale</p>
-              </div>
-            `,
+            html: emailShell(`
+              <h2 style="margin:0 0 6px;color:#1e293b;font-size:22px;">Aprovação Necessária</h2>
+              <p style="margin:0 0 20px;color:#475569;font-size:15px;">Uma nova solicitação de agendamento foi recebida e aguarda sua aprovação.</p>
+
+              ${detailsTable(
+                detailRow("Cliente", `${userName} · ${userEmail}`) +
+                detailRow("Pet", petName) +
+                detailRow("Serviço", serviceName) +
+                detailRow("Data", formattedDate) +
+                detailRow("Horário", time) +
+                (providerName ? detailRow("Profissional", providerName) : '') +
+                (notes ? detailRow("Observações", notes) : '')
+              )}
+
+              <table cellpadding="0" cellspacing="0" style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;width:100%;margin:20px 0;">
+                <tr><td style="padding:16px 20px;">
+                  <p style="margin:0 0 4px;font-size:14px;">${statusBadge("Ação Necessária", "#fee2e2", "#b91c1c")}</p>
+                  <p style="margin:8px 0 0;font-size:14px;color:#991b1b;">Acesse o painel administrativo para aprovar ou rejeitar esta solicitação.</p>
+                </td></tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-size:14px;color:#64748b;">Atenciosamente,<br><strong style="color:#1e293b;">Sistema Vettale</strong></p>
+            `),
           });
         }
       }
@@ -186,7 +217,7 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ success: true, message: 'Notifications sent successfully' }), 
       {
         status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { "Content-Type": "application/json", ...getCors(origin) },
       }
     );
 
@@ -196,7 +227,7 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ error: error.message }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { "Content-Type": "application/json", ...getCors(origin) },
       }
     );
   }

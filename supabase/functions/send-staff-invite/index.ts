@@ -1,22 +1,18 @@
 // Deno Edge Function - Staff Account Setup (Password Reset Approach)
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const corsHeaders: HeadersInit = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { corsHeaders as getCors } from '../_shared/cors.ts';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const origin = req.headers.get('origin');
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCors(origin) });
 
   try {
     const { email, staff_profile_id, name } = await req.json();
     console.log('🔐 [STAFF_SETUP] Request:', { email, staff_profile_id, name });
 
     if (!email || !staff_profile_id) {
-      return new Response(JSON.stringify({ ok: false, error: 'email and staff_profile_id are required' }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ ok: false, error: 'email and staff_profile_id are required' }), { status: 400, headers: getCors(origin)});
     }
 
     const supabaseAdmin = createClient(
@@ -44,7 +40,7 @@ Deno.serve(async (req) => {
           console.log('ℹ️ [STAFF_SETUP] User already exists, proceeding with recovery');
         } else {
           console.error('❌ [STAFF_SETUP] User creation error:', createError);
-          return new Response(JSON.stringify({ ok: false, error: createError.message }), { status: 400, headers: corsHeaders });
+          return new Response(JSON.stringify({ ok: false, error: createError.message }), { status: 400, headers: getCors(origin)});
         }
       } else {
         userId = createData.user?.id;
@@ -63,7 +59,7 @@ Deno.serve(async (req) => {
     
     if (resetError) {
       console.error('❌ [STAFF_SETUP] Password reset error:', resetError);
-      return new Response(JSON.stringify({ ok: false, error: resetError.message }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ ok: false, error: resetError.message }), { status: 400, headers: getCors(origin)});
     }
 
     console.log('✅ [STAFF_SETUP] Password reset link generated');
@@ -89,10 +85,10 @@ Deno.serve(async (req) => {
       user_id: userId,
       reset_link: resetData.properties?.action_link,
       message: 'User created and password reset link sent'
-    }), { headers: corsHeaders });
+    }), { headers: getCors(origin)});
     
   } catch (e) {
     console.error('❌ [STAFF_SETUP] Unexpected error:', e);
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: getCors(origin)});
   }
 });

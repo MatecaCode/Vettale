@@ -245,10 +245,11 @@ const AdminSettings = () => {
       setResendingSetupFor(staffProfile.id);
       
       // Use fetch directly to get better error details
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(`https://ieotixprkfglummoobkb.supabase.co/functions/v1/send-staff-invite`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imllb3RpeHBya2ZnbHVtbW9vYmtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzMjUxNjUsImV4cCI6MjA2NDkwMTE2NX0.hWAxW1tBbMQr3BOPSPOR57eiYvzWzDjaUMjigLyUaGQ`,
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -359,10 +360,11 @@ const AdminSettings = () => {
 
       // Send invitation email using Edge Function (like client flow)
       try {
+        const { data: { session: inviteSession } } = await supabase.auth.getSession();
         const response = await fetch(`https://ieotixprkfglummoobkb.supabase.co/functions/v1/send-staff-invite`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imllb3RpeHBya2ZnbHVtbW9vYmtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzMjUxNjUsImV4cCI6MjA2NDkwMTE2NX0.hWAxW1tBbMQr3BOPSPOR57eiYvzWzDjaUMjigLyUaGQ`,
+            'Authorization': `Bearer ${inviteSession?.access_token ?? ''}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

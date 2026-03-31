@@ -47,6 +47,8 @@ export interface Pet {
   weight?: number;
   gender?: string;
   notes?: string;
+  // Item 23: New Pet Detection Mechanism — true until first completed appointment
+  is_first_visit?: boolean;
 }
 
 export interface NextAvailable {

@@ -13,18 +13,19 @@ import { PetDobPicker } from '@/components/calendars/pet/PetDobPicker';
 import { BreedCombobox } from '@/components/BreedCombobox';
 import { toast } from 'sonner';
 import { 
-  PawPrint, 
-  Search, 
-  Plus, 
-  Edit, 
-  Trash2, 
+  PawPrint,
+  Search,
+  Plus,
+  Edit,
+  Trash2,
   User,
   FileText,
   Dog,
   Cat,
   HelpCircle,
   Loader2,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,6 +46,8 @@ interface Pet {
   client_id: string;
   client_name?: string;
   client_email?: string;
+  // Item 23: New Pet Detection Mechanism — true until first completed appointment
+  is_first_visit?: boolean;
 }
 
 interface Breed {
@@ -101,7 +104,7 @@ const AdminPets = () => {
     try {
       const cols = `
         id, name, breed, breed_id, size, age, birth_date, notes,
-        created_at, updated_at, client_id,
+        created_at, updated_at, client_id, is_first_visit,
         clients:client_id (name, email)
       `;
 
@@ -652,6 +655,12 @@ const AdminPets = () => {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <CardTitle className="text-lg leading-tight mb-1">{pet.name}</CardTitle>
+                      {pet.is_first_visit && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                          <Sparkles className="h-3 w-3" />
+                          Primeira visita
+                        </span>
+                      )}
                     </div>
                     <div className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 ring-1 ring-slate-200">
                       <User className="h-3 w-3 mr-1" />
