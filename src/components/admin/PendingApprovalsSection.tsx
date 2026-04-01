@@ -20,7 +20,8 @@ interface PendingAppointment {
   pet_id: string;
   service_id: string;
   duration?: number;
-  total_price?: number;
+  // Item 22: null = first-visit pet, price to be determined after evaluation
+  total_price?: number | null;
   created_at: string;
   // Related data
   client?: { name: string; };
@@ -78,7 +79,8 @@ const PendingApprovalsSection = () => {
         pet_id: apt.pet_id,
         service_id: apt.service_id,
         duration: apt.duration || 60,
-        total_price: apt.total_price || 0,
+        // Item 22: keep null as null — null means first-visit (no price yet)
+        total_price: apt.total_price ?? null,
         created_at: apt.created_at,
         client: { name: (apt.clients as any)?.name || 'Cliente' },
         pet: { name: (apt.pets as any)?.name || 'Pet' },
@@ -256,11 +258,15 @@ const PendingApprovalsSection = () => {
                     
                     <div className="text-sm">
                       <strong>Serviço:</strong> {appointment.service?.name}
-                      {appointment.total_price > 0 && (
+                      {appointment.total_price == null ? (
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Primeira visita
+                        </span>
+                      ) : appointment.total_price > 0 ? (
                         <span className="ml-2 text-green-600 font-medium">
                           R$ {appointment.total_price.toFixed(2)}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     
                     {appointment.staff && appointment.staff.length > 0 && (

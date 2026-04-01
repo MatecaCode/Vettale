@@ -1070,7 +1070,9 @@ const AdminManualBooking = () => {
       console.log('[CREATE_BOOKING] payload keys', payload && Object.keys(payload));
       console.log('[CREATE_BOOKING] payload', payload);
 
-      // Always use unified RPC for all booking scenarios
+      // Always use unified RPC for all booking scenarios.
+      // Item 22: admin bookings intentionally bypass is_first_visit — the admin
+      // always sets a fixed calculated price regardless of the pet's visit history.
       const rpcName = 'create_unified_admin_booking';
 
       console.log(`[ADMIN_BOOKING] Using unified RPC: ${rpcName}`);

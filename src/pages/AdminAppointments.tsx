@@ -457,11 +457,19 @@ const AdminAppointments = () => {
             <div className="inline-flex items-center gap-1">
               <span className="text-gray-500">💰</span>
               <span className="text-xs font-medium text-gray-700">Preço:</span>
-              <span className="text-sm font-medium">R$ {(appointment.total_price || 0).toFixed(2)}</span>
-              {appointment.extra_fee !== null && appointment.extra_fee !== undefined && appointment.extra_fee > 0 && (
-                <span className="text-xs text-orange-600 ml-2 font-medium">
-                  💲 +R$ {appointment.extra_fee.toFixed(2)}
+              {appointment.total_price == null ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Primeira visita
                 </span>
+              ) : (
+                <>
+                  <span className="text-sm font-medium">R$ {appointment.total_price.toFixed(2)}</span>
+                  {appointment.extra_fee !== null && appointment.extra_fee !== undefined && appointment.extra_fee > 0 && (
+                    <span className="text-xs text-orange-600 ml-2 font-medium">
+                      💲 +R$ {appointment.extra_fee.toFixed(2)}
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -914,9 +922,17 @@ const AdminAppointments = () => {
                     <span className="text-gray-500">💰</span>
                     <div>
                       <p className="text-sm font-medium text-gray-700">Preço</p>
-                      <p className="text-sm text-gray-600 font-medium">R$ {(selectedAppointment.total_price || 0).toFixed(2)}</p>
-                      {selectedAppointment.extra_fee && selectedAppointment.extra_fee > 0 && (
-                        <p className="text-xs text-orange-600">+ R$ {selectedAppointment.extra_fee.toFixed(2)} taxa extra</p>
+                      {selectedAppointment.total_price == null ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Primeira visita
+                        </span>
+                      ) : (
+                        <>
+                          <p className="text-sm text-gray-600 font-medium">R$ {selectedAppointment.total_price.toFixed(2)}</p>
+                          {selectedAppointment.extra_fee && selectedAppointment.extra_fee > 0 && (
+                            <p className="text-xs text-orange-600">+ R$ {selectedAppointment.extra_fee.toFixed(2)} taxa extra</p>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

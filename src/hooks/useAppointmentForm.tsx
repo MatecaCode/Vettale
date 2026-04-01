@@ -21,6 +21,8 @@ export interface Pet {
   weight?: number;
   gender?: string;
   notes?: string;
+  // Item 23/22: true = pet has never had a completed appointment
+  is_first_visit?: boolean;
 }
 
 export interface Service {
@@ -254,18 +256,26 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
       const dateStr = date.toISOString().split('T')[0];
       const primaryDuration = pricing?.duration || selectedService.default_duration || 60;
 
+      // Item 22: first-visit pets get NULL price — the clinic will quote after
+      // the in-person evaluation. The create_booking_client RPC accepts null for
+      // _calculated_price (DEFAULT NULL::numeric) so this is safe to pass through.
+      // Admin bookings always bypass this check (they use AdminManualBooking).
+      const isFirstVisit = selectedPet.is_first_visit === true;
+
       // If secondary service is selected and allowed, calculate combined price/duration
-      let calculatedPrice = pricing?.price || selectedService.base_price || 0;
+      let calculatedPrice: number | null = isFirstVisit
+        ? null
+        : (pricing?.price || selectedService.base_price || 0);
       let calculatedDuration = primaryDuration;
 
       const primaryCategory = getServiceCategory(selectedService as any);
-      if (primaryCategory === 'BATH' && selectedSecondaryService) {
+      if (!isFirstVisit && primaryCategory === 'BATH' && selectedSecondaryService) {
         const sec = await PricingService.calculatePricing({
           serviceId: selectedSecondaryService.id,
           breedId: selectedPet.breed_id,
           size: selectedPet.size || undefined
         });
-        calculatedPrice = calculatedPrice + (sec?.price || 0);
+        calculatedPrice = (calculatedPrice as number) + (sec?.price || 0);
         calculatedDuration = calculatedDuration + (sec?.duration || 0);
       }
       
@@ -279,6 +289,7 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
         status: 'pending', // Always start as pending for admin approval
         service_status: 'not_started',
         duration: calculatedDuration,
+        // Item 22: null for first-visit pets; the clinic quotes after evaluation
         total_price: calculatedPrice
       };
 
