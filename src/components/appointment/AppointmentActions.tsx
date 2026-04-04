@@ -79,7 +79,7 @@ const AppointmentActions = ({
           )
         `)
         .eq('id', appointmentId)
-        .single();
+        .maybeSingle();
 
       if (fetchError) {
         console.error(`[CANCELLATION] Failed to fetch appointment details:`, fetchError);
@@ -87,7 +87,7 @@ const AppointmentActions = ({
       }
 
       if (!appointment) {
-        throw new Error('Appointment not found');
+        throw new Error('Agendamento não encontrado');
       }
 
       console.log(`[CANCELLATION] Appointment details:`, {

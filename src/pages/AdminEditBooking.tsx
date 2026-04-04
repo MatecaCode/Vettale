@@ -89,6 +89,7 @@ interface ServiceStaffAssignment {
   staff_profile_id: string | null;
   staff_name: string | null;
   role: string | null;
+  duration?: number; // minutes for this service segment
 }
 
 interface StaffMember {
@@ -209,7 +210,9 @@ const AdminEditBooking = () => {
         };
 
         setAppointmentDetails(appointmentDetails);
-        // Don't set selectedDate initially - let user choose if they want to change it
+        // Pre-select the appointment's current date and time so the admin only
+        // changes what they actually need to (e.g. staff-only swap requires no date pick).
+        setSelectedDate(new Date(data.date + 'T12:00:00'));
         setSelectedTime(data.time);
         setSelectedDuration(0);
         setExtraFee(data.extra_fee?.toString() || '');
@@ -247,19 +250,34 @@ const AdminEditBooking = () => {
 
       console.log('✅ [ADMIN_EDIT_BOOKING] Service staff assignments loaded:', data);
       
+      // Fetch per-service durations from appointment_services so we can show
+      // the time breakdown in the UI (start → end per segment).
+      const { data: apsDurations } = await supabase
+        .from('appointment_services')
+        .select('service_id, service_order, duration')
+        .eq('appointment_id', appointmentId);
+
+      const durationByServiceId: Record<string, number> = {};
+      (apsDurations || []).forEach((row: any) => {
+        if (row.duration != null) durationByServiceId[row.service_id] = row.duration;
+      });
+
       const assignments: ServiceStaffAssignment[] = data.map((item: any) => ({
         service_id: item.service_id,
         service_name: item.service_name,
         service_order: item.service_order,
         staff_profile_id: item.staff_profile_id,
         staff_name: item.staff_name,
-        role: item.role
+        role: item.role,
+        duration: durationByServiceId[item.service_id],
       }));
 
       setServiceStaffAssignments(assignments);
       
-      // Initialize selectedStaffIds from current assignments
-      const currentStaffIds = assignments
+      // Initialize selectedStaffIds from current assignments, sorted by service_order
+      // so _new_staff_ids[0] = primary staff, [1] = secondary staff as the RPC expects
+      const currentStaffIds = [...assignments]
+        .sort((a, b) => a.service_order - b.service_order)
         .filter(assignment => assignment.staff_profile_id)
         .map(assignment => assignment.staff_profile_id!);
       setSelectedStaffIds(currentStaffIds);
@@ -312,15 +330,18 @@ const AdminEditBooking = () => {
       [serviceId]: newStaffId
     }));
     
-    // Update selectedStaffIds to reflect current + pending changes
-    const updatedStaffIds = serviceStaffAssignments.map(assignment => {
-      if (assignment.service_id === serviceId) {
-        return newStaffId; // Use new staff ID for this service
-      }
-      // Check if there's a pending change for this assignment
-      const pendingChange = pendingStaffChanges[assignment.service_id];
-      return pendingChange !== undefined ? pendingChange : assignment.staff_profile_id;
-    }).filter(Boolean) as string[]; // Remove null values
+    // Update selectedStaffIds to reflect current + pending changes, sorted by service_order
+    // so _new_staff_ids[0] = primary staff, [1] = secondary staff as the RPC expects
+    const updatedStaffIds = [...serviceStaffAssignments]
+      .sort((a, b) => a.service_order - b.service_order)
+      .map(assignment => {
+        if (assignment.service_id === serviceId) {
+          return newStaffId; // Use new staff ID for this service
+        }
+        // Check if there's a pending change for this assignment
+        const pendingChange = pendingStaffChanges[assignment.service_id];
+        return pendingChange !== undefined ? pendingChange : assignment.staff_profile_id;
+      }).filter(Boolean) as string[]; // Remove null values
     
     setSelectedStaffIds(updatedStaffIds);
     console.log('🔍 [ADMIN_EDIT_BOOKING] Updated selected staff IDs:', updatedStaffIds);
@@ -605,10 +626,17 @@ const AdminEditBooking = () => {
         _force_override: editData.forceOverride
       };
 
-      // Add staff IDs for dual-service function
+      // Add staff IDs for dual-service function — only when staff actually changed.
+      // If no pending staff changes exist, omit _new_staff_ids entirely so the RPC
+      // reads current DB staff and staff_changed = FALSE, preventing spurious slot
+      // freeing/blocking on notes-only or fee-only edits.
       if (rpcFunction === 'edit_admin_booking_with_dual_services') {
-        rpcParams._new_staff_ids = selectedStaffIds;
-        console.log('🔧 [ADMIN_EDIT_BOOKING] Including staff IDs:', selectedStaffIds);
+        if (Object.keys(pendingStaffChanges).length > 0) {
+          rpcParams._new_staff_ids = selectedStaffIds;
+          console.log('🔧 [ADMIN_EDIT_BOOKING] Including staff IDs (changed):', selectedStaffIds);
+        } else {
+          console.log('🔧 [ADMIN_EDIT_BOOKING] No staff changes — omitting _new_staff_ids, RPC will use current DB staff');
+        }
       }
 
       const { error } = await supabase.rpc(rpcFunction, rpcParams);
@@ -639,12 +667,29 @@ const AdminEditBooking = () => {
         }
       }
 
-      // Staff changes are now handled directly by the RPC
-      // Clear pending changes since they've been applied
+      // Staff changes are handled by the RPC. Clear pending changes.
       setPendingStaffChanges({});
 
-      // Refresh staff assignments and availability data
-      await loadServiceStaffAssignments(editData.appointmentId);
+      // Re-fetch staff from appointment_staff directly so the preview reflects the DB truth
+      const { data: freshStaff } = await supabase
+        .from('appointment_staff')
+        .select('staff_profile_id, role, service_id, staff_profiles(name)')
+        .eq('appointment_id', editData.appointmentId);
+
+      if (freshStaff) {
+        setServiceStaffAssignments(prev =>
+          prev.map(assignment => {
+            const fresh = freshStaff.find(s => s.service_id === assignment.service_id);
+            if (!fresh) return assignment;
+            return {
+              ...assignment,
+              staff_profile_id: fresh.staff_profile_id,
+              staff_name: (fresh.staff_profiles as any)?.name ?? null,
+              role: fresh.role,
+            };
+          })
+        );
+      }
       
       console.log('✅ [ADMIN_EDIT_BOOKING] Successfully edited booking');
 
@@ -1110,12 +1155,51 @@ const AdminEditBooking = () => {
                   </div>
 
                   {/* Service-Specific Staff Assignment */}
-                  {serviceStaffAssignments.length > 0 && (
+                  {serviceStaffAssignments.length > 0 && (() => {
+                    // Build per-service time breakdown from selectedTime (or appointment time).
+                    const baseTime = selectedTime || appointmentDetails?.time || '';
+                    const addMins = (time: string, mins: number): string => {
+                      if (!time) return '';
+                      const [hStr, mStr] = time.replace(/:\d\d$/, '').split(':');
+                      const total = parseInt(hStr, 10) * 60 + parseInt(mStr, 10) + mins;
+                      const h = Math.floor(total / 60) % 24;
+                      const m = total % 60;
+                      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                    };
+                    const sorted = [...serviceStaffAssignments].sort((a, b) => a.service_order - b.service_order);
+                    let offset = 0;
+                    const segments = sorted.map(a => {
+                      const dur = a.duration ?? 0;
+                      const start = addMins(baseTime, offset);
+                      const end   = addMins(baseTime, offset + dur);
+                      offset += dur;
+                      return { ...a, start, end, dur };
+                    });
+                    const totalMin = offset + (selectedDuration || 0);
+                    return (
                     <div className="space-y-4">
                       <Label className="flex items-center gap-2">
                         <Users className="h-4 w-4" />
                         Atribuição de Staff por Serviço
                       </Label>
+
+                      {/* Per-service time breakdown */}
+                      {baseTime && (
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-1">
+                          {segments.map(seg => (
+                            <div key={seg.service_id} className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900 w-40 truncate">{seg.service_name}</span>
+                              <span className="text-gray-500">—</span>
+                              <span>{seg.dur > 0 ? `${seg.dur} min` : '— min'}</span>
+                              <span className="text-gray-500">—</span>
+                              <span className="font-mono">{seg.start || '—'} → {seg.end || '—'}</span>
+                            </div>
+                          ))}
+                          <div className="border-t border-gray-300 pt-1 mt-1 font-medium text-gray-800">
+                            Total: {totalMin} min
+                          </div>
+                        </div>
+                      )}
                       
                       <div className="space-y-3">
                         {serviceStaffAssignments.map((assignment) => {
@@ -1209,7 +1293,8 @@ const AdminEditBooking = () => {
                         </ul>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Extra Fee */}
                   <div className="space-y-2">

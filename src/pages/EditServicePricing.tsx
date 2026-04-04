@@ -184,6 +184,7 @@ const EditServicePricing = () => {
     try {
       const pricingData = {
         service_id: serviceId,
+        service_name: service.name,
         breed: selectedBreed.name,
         size: selectedSize,
         price: parseFloat(newPrice),

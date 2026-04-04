@@ -355,12 +355,19 @@ const AdminAppointments = () => {
     await fetchAppointments();
   };
 
-  const getStatusBadge = (status: string, serviceStatus?: string) => {
+  const getStatusBadge = (status: string, serviceStatus?: string, date?: Date) => {
     switch (status) {
       case 'pending':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendente</Badge>;
-      case 'confirmed':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Confirmado</Badge>;
+      case 'confirmed': {
+        // If the appointment date has already passed, flag it for the admin to conclude.
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const isPast = date != null && date < today;
+        return isPast
+          ? <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">Pendente conclusão</Badge>
+          : <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Confirmado</Badge>;
+      }
       case 'completed':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Concluído</Badge>;
       case 'cancelled':
@@ -408,7 +415,7 @@ const AdminAppointments = () => {
               <p className="text-sm text-gray-500 break-words">{appointment.service_name}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {getStatusBadge(appointment.status, appointment.service_status)}
+              {getStatusBadge(appointment.status, appointment.service_status, appointment.date)}
               <ServiceStatusDropdown
                 appointmentId={appointment.id}
                 value={(appointment.service_status as 'not_started' | 'in_progress' | 'completed')}
