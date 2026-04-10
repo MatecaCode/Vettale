@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -132,8 +132,17 @@ const AdminEditBooking = () => {
   // Pending staff changes (not applied until save)
   const [pendingStaffChanges, setPendingStaffChanges] = useState<Record<string, string | null>>({});
   
-  // Single source of truth for selected staff IDs (current + pending changes)
-  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+  // Derived: current assignments + pending changes, ordered by service_order.
+  // Recomputes automatically whenever assignments or pending changes update.
+  const selectedStaffIds = useMemo(() => {
+    return [...serviceStaffAssignments]
+      .sort((a, b) => a.service_order - b.service_order)
+      .map(assignment => {
+        const pending = pendingStaffChanges[assignment.service_id];
+        return pending !== undefined ? pending : assignment.staff_profile_id;
+      })
+      .filter(Boolean) as string[];
+  }, [serviceStaffAssignments, pendingStaffChanges]);
   
   // Modal state
   const [showOverrideModal, setShowOverrideModal] = useState(false);
@@ -274,15 +283,6 @@ const AdminEditBooking = () => {
 
       setServiceStaffAssignments(assignments);
       
-      // Initialize selectedStaffIds from current assignments, sorted by service_order
-      // so _new_staff_ids[0] = primary staff, [1] = secondary staff as the RPC expects
-      const currentStaffIds = [...assignments]
-        .sort((a, b) => a.service_order - b.service_order)
-        .filter(assignment => assignment.staff_profile_id)
-        .map(assignment => assignment.staff_profile_id!);
-      setSelectedStaffIds(currentStaffIds);
-      console.log('🔍 [ADMIN_EDIT_BOOKING] Initialized staff IDs:', currentStaffIds);
-      
       // Detect if this is a dual-service appointment (has service_order = 2)
       const hasDualService = assignments.some(assignment => assignment.service_order === 2);
       setIsDualService(hasDualService);
@@ -320,32 +320,15 @@ const AdminEditBooking = () => {
     }
   };
 
-  // Handle service staff change (local only - not applied until save)
+  // Handle service staff change (local only - not applied until save).
+  // selectedStaffIds is derived via useMemo from pendingStaffChanges,
+  // so updating pendingStaffChanges automatically triggers a re-fetch.
   const handleServiceStaffChange = (serviceId: string, newStaffId: string | null) => {
     console.log('🔍 [ADMIN_EDIT_BOOKING] Pending staff change for service:', serviceId, 'to:', newStaffId);
-    
-    // Store the change locally
     setPendingStaffChanges(prev => ({
       ...prev,
       [serviceId]: newStaffId
     }));
-    
-    // Update selectedStaffIds to reflect current + pending changes, sorted by service_order
-    // so _new_staff_ids[0] = primary staff, [1] = secondary staff as the RPC expects
-    const updatedStaffIds = [...serviceStaffAssignments]
-      .sort((a, b) => a.service_order - b.service_order)
-      .map(assignment => {
-        if (assignment.service_id === serviceId) {
-          return newStaffId; // Use new staff ID for this service
-        }
-        // Check if there's a pending change for this assignment
-        const pendingChange = pendingStaffChanges[assignment.service_id];
-        return pendingChange !== undefined ? pendingChange : assignment.staff_profile_id;
-      }).filter(Boolean) as string[]; // Remove null values
-    
-    setSelectedStaffIds(updatedStaffIds);
-    console.log('🔍 [ADMIN_EDIT_BOOKING] Updated selected staff IDs:', updatedStaffIds);
-    console.log('🔍 [ADMIN_EDIT_BOOKING] This should trigger time slot reload for new staff availability');
   };
 
   // Apply all pending staff changes when form is submitted
@@ -495,12 +478,15 @@ const AdminEditBooking = () => {
         secondary: secondaryServiceDetails?.name || 'None'
       });
 
-      // Use admin availability hook to fetch time slots
+      // Use admin availability hook to fetch time slots.
+      // Pass appointmentId so the RPC excludes this booking's own blocked
+      // slots — otherwise the booking conflicts with itself during edit.
       await fetchAdminTimeSlots(
         selectedDate,
         staffIds,
         primaryServiceDetails || null,
-        secondaryServiceDetails || null
+        secondaryServiceDetails || null,
+        appointmentId || null
       );
     };
 

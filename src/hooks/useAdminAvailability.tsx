@@ -116,7 +116,8 @@ export const useAdminAvailability = () => {
     date: Date,
     staffIds: string[],
     selectedService: AdminService | null,
-    selectedSecondaryService: AdminService | null = null
+    selectedSecondaryService: AdminService | null = null,
+    excludeAppointmentId: string | null = null
   ) => {
     console.log(`🔧 [ADMIN_AVAILABILITY] Fetching admin time slots`);
     console.log(`📅 [ADMIN_AVAILABILITY] Date: ${format(date, 'yyyy-MM-dd')}`);
@@ -206,14 +207,18 @@ export const useAdminAvailability = () => {
         });
       }
 
-      // Call the new RPC function
-      const { data: availableStartTimes, error } = await supabase.rpc('find_dual_service_slots', {
+      const rpcParams: Record<string, any> = {
         _date: dateForQuery,
         _primary_staff_id: primaryStaffId,
         _primary_service_id: selectedService?.id,
         _secondary_staff_id: secondaryStaffId,
-        _secondary_service_id: selectedSecondaryService?.id || null
-      });
+        _secondary_service_id: selectedSecondaryService?.id || null,
+      };
+      if (excludeAppointmentId) {
+        rpcParams._exclude_appointment_id = excludeAppointmentId;
+      }
+
+      const { data: availableStartTimes, error } = await supabase.rpc('find_dual_service_slots', rpcParams);
 
       if (error) {
         console.error('[ADMIN_SLOTS] rpc error', error);

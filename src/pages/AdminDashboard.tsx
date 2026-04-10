@@ -194,12 +194,12 @@ const AdminDashboard = () => {
             />
             
             <ActionCard
-              title="Logs de Ações"
+              title="Log de Ações"
               description="Histórico de ações administrativas"
               icon={<Activity className="h-5 w-5" />}
               iconBgColor="bg-gray-100"
               iconColor="text-gray-600"
-              href="/admin/logs"
+              href="/admin/action-log"
             />
           </div>
 

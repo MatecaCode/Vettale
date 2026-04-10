@@ -120,6 +120,17 @@ const StaffCalendar: React.FC = () => {
           ),
           clients (
             name
+          ),
+          appointment_services (
+            service_id,
+            service_order,
+            duration,
+            services(name, service_type)
+          ),
+          appointment_staff (
+            staff_profile_id,
+            service_id,
+            role
           )
         `)
         .gte('date', startDate)
@@ -130,29 +141,61 @@ const StaffCalendar: React.FC = () => {
 
       if (error) throw error;
 
-      // Filter appointments that are assigned to this staff member
-      const { data: staffAppointments, error: staffError } = await supabase
-        .from('appointment_staff')
-        .select('appointment_id')
-        .eq('staff_profile_id', staffProfile.id);
+      // Build per-service entries scoped to this staff member
+      const formattedAppointments: Appointment[] = [];
 
-      if (staffError) throw staffError;
+      for (const apt of (appointmentData || [])) {
+        const staffRows = ((apt as any).appointment_staff || [])
+          .filter((s: any) => s.staff_profile_id === staffProfile.id);
 
-      const staffAppointmentIds = staffAppointments?.map(sa => sa.appointment_id) || [];
+        if (staffRows.length === 0) continue;
 
-      const formattedAppointments: Appointment[] = appointmentData
-        ?.filter(apt => staffAppointmentIds.includes(apt.id))
-        .map(apt => ({
-          id: apt.id,
-          date: apt.date,
-          time: apt.time,
-          service_name: (apt.services as any)?.name || 'Serviço',
-          service_type: (apt.services as any)?.service_type || 'general',
-          pet_name: (apt.pets as any)?.name || 'Pet',
-          client_name: (apt.clients as any)?.name || 'Cliente',
-          duration: apt.duration || 60,
-          status: apt.status
-        })) || [];
+        const apptServices = ((apt as any).appointment_services || [])
+          .sort((a: any, b: any) => (a.service_order || 1) - (b.service_order || 1));
+
+        if (apptServices.length <= 1) {
+          formattedAppointments.push({
+            id: apt.id,
+            date: apt.date,
+            time: apt.time,
+            service_name: (apt.services as any)?.name || 'Serviço',
+            service_type: (apt.services as any)?.service_type || 'general',
+            pet_name: (apt.pets as any)?.name || 'Pet',
+            client_name: (apt.clients as any)?.name || 'Cliente',
+            duration: apt.duration || 60,
+            status: apt.status,
+          });
+        } else {
+          const baseTime = apt.time.slice(0, 5);
+          const [baseH, baseM] = baseTime.split(':').map(Number);
+          let offsetMinutes = 0;
+
+          for (const svc of apptServices) {
+            const isAssigned = staffRows.some((s: any) => s.service_id === svc.service_id);
+            const svcDuration = svc.duration || 60;
+
+            if (isAssigned) {
+              const startTotalMin = baseH * 60 + baseM + offsetMinutes;
+              const startHH = Math.floor(startTotalMin / 60).toString().padStart(2, '0');
+              const startMM = (startTotalMin % 60).toString().padStart(2, '0');
+
+              formattedAppointments.push({
+                id: apt.id,
+                date: apt.date,
+                time: `${startHH}:${startMM}:00`,
+                service_name: svc.services?.name || 'Serviço',
+                service_type: svc.services?.service_type || 'general',
+                pet_name: (apt.pets as any)?.name || 'Pet',
+                client_name: (apt.clients as any)?.name || 'Cliente',
+                duration: svcDuration,
+                status: apt.status,
+              });
+            }
+
+            offsetMinutes += svcDuration;
+          }
+        }
+      }
 
       setAppointments(formattedAppointments);
     } catch (error) {

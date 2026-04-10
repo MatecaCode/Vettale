@@ -31,7 +31,6 @@ import StaffAvailability from "./pages/StaffAvailability";
 import StaffCalendar from "./pages/StaffCalendar";
 import AdminActionCenter from "./pages/AdminActionCenter";
 import AdminSettings from "./pages/AdminSettings";
-import AdminLogs from "./pages/AdminLogs";
 import AdminEditLogs from "./pages/AdminEditLogs";
 import AdminManualBooking from "./pages/AdminManualBooking";
 import AdminAppointments from "./pages/AdminAppointments";
@@ -282,7 +281,6 @@ function App() {
               <Route path="/admin/staff-availability" element={<AdminAvailabilityManager />} />
               <Route path="/admin/clients" element={<AdminClients />} />
               <Route path="/admin/pets" element={<AdminPets />} />
-              <Route path="/admin/logs" element={<AdminLogs />} />
               <Route path="/admin/edit-logs" element={<AdminEditLogs />} />
               <Route path="/admin/agenda-hoje" element={<AdminAgendaHoje />} />
               <Route path="/admin/notifications" element={<AdminNotifications />} />

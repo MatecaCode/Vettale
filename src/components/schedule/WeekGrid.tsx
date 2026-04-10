@@ -2,68 +2,80 @@ import React from 'react';
 import DayColumn from './DayColumn';
 
 export interface WeekGridProps {
-  hourLabels: string[]; // e.g., ['09:00','09:30',...]
+  hourLabels: string[];
   days: Array<{
     dateISO: string;
     label: string;
     staff: Array<{ id: string; name: string }>;
-    byStaffAppointments: Record<string, any[]>; // StaffLaneAppointment[]
+    byStaffAppointments: Record<string, any[]>;
   }>;
   compact?: boolean;
+  onClickAppointment?: (id: string) => void;
 }
 
-const WeekGrid: React.FC<WeekGridProps> = ({ hourLabels, days, compact = false }) => {
-  // Compute required height per day from max appointment end time to avoid extra blank space
-  const computeHeight = (day: WeekGridProps['days'][number]) => {
-    const all = Object.values(day.byStaffAppointments || {}).flat() as any[];
-    if (all.length === 0) return 960; // default 8h window
-    const toMin = (hhmm: string) => {
-      const [h, m] = hhmm.split(':').map(Number);
-      return h * 60 + m;
-    };
-    const maxEnd = Math.max(
-      ...all.map(a => {
-        const start = toMin(a.startHHMM);
-        return start + (a.durationMin || 60);
-      })
-    );
-    const dayStart = 9 * 60;
-    const visible = Math.max(maxEnd, 17 * 60) - dayStart; // never smaller than 17:00 baseline
-    return Math.ceil(visible * 2); // 2px per minute
-  };
-  return (
-    <div className="grid" style={{ gridTemplateColumns: `80px repeat(7, minmax(0, 1fr))` }}>
-      {/* Hour rail */}
-      <div className="border-r">
-        <div className="sticky top-0 bg-white/80 backdrop-blur border-b p-2 text-xs font-medium">Horário</div>
-        <div className="h-[1200px] overflow-hidden relative">
-          {hourLabels.map(h => (
-            <div key={h} className="h-12 flex items-center justify-center text-xs text-gray-600 border-b">
-              {h}
-            </div>
-          ))}
-        </div>
-      </div>
+const PIXELS_PER_MINUTE = 2;
+const DAY_START_MINUTE = 9 * 60;
+const SLOT_HEIGHT_PX = 60; // 30 min × 2px/min = 60px per slot row
 
-      {days.map(day => {
-        const h = computeHeight(day);
-        return (
-          <div key={day.dateISO} className="border-r">
+const WeekGrid: React.FC<WeekGridProps> = ({ hourLabels, days, compact = false, onClickAppointment }) => {
+  const totalMinutes = hourLabels.length * 30;
+  const gridHeight = totalMinutes * PIXELS_PER_MINUTE;
+  const todayISO = new Date().toISOString().split('T')[0];
+
+  return (
+    <div className="overflow-x-auto">
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `56px repeat(7, minmax(140px, 1fr))`, minWidth: '1040px' }}
+      >
+        {/* ── Hour rail ───────────────────────────────── */}
+        <div className="border-r bg-gray-50/60">
+          {/* Spacer for day header + staff sub-header */}
+          <div className="h-[52px] border-b" />
+
+          <div className="relative" style={{ height: gridHeight }}>
+            {hourLabels.map((h, i) => (
+              <div
+                key={h}
+                className="absolute w-full flex items-start justify-end pr-2 text-[10px] text-gray-400 tabular-nums"
+                style={{ top: i * SLOT_HEIGHT_PX, height: SLOT_HEIGHT_PX }}
+              >
+                {h}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Day columns ─────────────────────────────── */}
+        {days.map(day => (
+          <div key={day.dateISO} className="border-r relative">
             <DayColumn
               dateLabel={day.label}
               staff={day.staff}
               byStaffAppointments={day.byStaffAppointments as any}
               compact={compact}
+              containerHeightPx={gridHeight}
+              pixelsPerMinute={PIXELS_PER_MINUTE}
+              dayStartMinute={DAY_START_MINUTE}
+              isToday={day.dateISO === todayISO}
+              onClickAppointment={onClickAppointment}
             />
-            {/* Pass dynamic height down via CSS var to lanes */}
-            <style>{`.day-height-${day.dateISO}{min-height:${h}px}`}</style>
+
+            {/* Horizontal gridlines */}
+            <div className="absolute left-0 right-0 pointer-events-none" style={{ top: 52 }}>
+              {hourLabels.map((_, i) => (
+                <div
+                  key={i}
+                  className="border-b border-gray-100"
+                  style={{ height: SLOT_HEIGHT_PX }}
+                />
+              ))}
+            </div>
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 };
 
 export default WeekGrid;
-
-

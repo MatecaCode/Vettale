@@ -19,12 +19,15 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  FileText
+  FileText,
+  ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/AdminLayout';
 import WeekGrid from '@/components/schedule/WeekGrid';
 import WeekLoadBar from '@/components/schedule/WeekLoadBar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 
 interface AppointmentData {
   appointment_id: string;
@@ -126,7 +129,7 @@ const AdminAgendaHoje = () => {
 
       setStaffColumns(staffColumnsData);
 
-      // Fetch appointments for the selected range
+      // Fetch appointments with per-service and per-staff data for dual-service support
       let query = supabase
         .from('appointments')
         .select(`
@@ -139,7 +142,16 @@ const AdminAgendaHoje = () => {
            services(name),
            pets(name),
            clients(name),
+           appointment_services(
+             service_id,
+             service_order,
+             duration,
+             services(name)
+           ),
            appointment_staff(
+             staff_profile_id,
+             service_id,
+             role,
              staff_profiles(
                id,
                name,
@@ -167,27 +179,69 @@ const AdminAgendaHoje = () => {
 
       
 
-      // Transform the data to match our interface
-      const transformedData: AppointmentData[] = appointmentData?.map((appointment: any) => {
-        
-        
-                 return {
-           appointment_id: appointment.id,
-           date: appointment.date,
-           time: appointment.time.slice(0, 5), // Convert "12:30:00" to "12:30"
-           duration: appointment.duration || 60,
-           status: appointment.status || 'pending',
-           service_name: appointment.services?.name || 'Serviço não encontrado',
-           pet_name: appointment.pets?.name || 'Pet não encontrado',
-           client_name: appointment.clients?.name || 'Cliente não encontrado',
-           staff_id: appointment.appointment_staff?.[0]?.staff_profiles?.id || '',
-           staff_name: appointment.appointment_staff?.[0]?.staff_profiles?.name || 'Staff não encontrado',
-           can_bathe: appointment.appointment_staff?.[0]?.staff_profiles?.can_bathe || false,
-           can_groom: appointment.appointment_staff?.[0]?.staff_profiles?.can_groom || false,
-           can_vet: appointment.appointment_staff?.[0]?.staff_profiles?.can_vet || false,
-           notes: appointment.notes || undefined,
-         };
-      }) || [];
+      // Explode each appointment into per-service entries (handles dual-service correctly)
+      const transformedData: AppointmentData[] = [];
+      for (const appointment of (appointmentData || [])) {
+        const apptServices = ((appointment as any).appointment_services || [])
+          .sort((a: any, b: any) => (a.service_order || 1) - (b.service_order || 1));
+        const staffRows = (appointment as any).appointment_staff || [];
+
+        if (apptServices.length <= 1) {
+          // Single-service appointment — original behaviour
+          const staff = staffRows[0]?.staff_profiles;
+          transformedData.push({
+            appointment_id: appointment.id,
+            date: appointment.date,
+            time: appointment.time.slice(0, 5),
+            duration: appointment.duration || 60,
+            status: appointment.status || 'pending',
+            service_name: apptServices[0]?.services?.name || (appointment as any).services?.name || 'Serviço',
+            pet_name: (appointment as any).pets?.name || 'Pet',
+            client_name: (appointment as any).clients?.name || 'Cliente',
+            staff_id: staff?.id || '',
+            staff_name: staff?.name || 'Staff',
+            can_bathe: staff?.can_bathe || false,
+            can_groom: staff?.can_groom || false,
+            can_vet: staff?.can_vet || false,
+            notes: appointment.notes || undefined,
+          });
+        } else {
+          // Dual (or multi) service — one entry per service, with calculated start times
+          const baseTime = appointment.time.slice(0, 5);
+          const [baseH, baseM] = baseTime.split(':').map(Number);
+          let offsetMinutes = 0;
+
+          for (const svc of apptServices) {
+            const svcDuration = svc.duration || 60;
+            const startTotalMin = baseH * 60 + baseM + offsetMinutes;
+            const startHH = Math.floor(startTotalMin / 60).toString().padStart(2, '0');
+            const startMM = (startTotalMin % 60).toString().padStart(2, '0');
+
+            const staff = staffRows.find(
+              (s: any) => s.service_id === svc.service_id
+            )?.staff_profiles;
+
+            transformedData.push({
+              appointment_id: appointment.id,
+              date: appointment.date,
+              time: `${startHH}:${startMM}`,
+              duration: svcDuration,
+              status: appointment.status || 'pending',
+              service_name: svc.services?.name || 'Serviço',
+              pet_name: (appointment as any).pets?.name || 'Pet',
+              client_name: (appointment as any).clients?.name || 'Cliente',
+              staff_id: staff?.id || '',
+              staff_name: staff?.name || 'Staff',
+              can_bathe: staff?.can_bathe || false,
+              can_groom: staff?.can_groom || false,
+              can_vet: staff?.can_vet || false,
+              notes: appointment.notes || undefined,
+            });
+
+            offsetMinutes += svcDuration;
+          }
+        }
+      }
 
       
       setAppointments(transformedData);
@@ -310,6 +364,13 @@ const AdminAgendaHoje = () => {
     setShowAppointmentModal(true);
   };
 
+  const handleWeekAppointmentClick = (appointmentId: string) => {
+    const found = appointments.find(a => a.appointment_id === appointmentId);
+    if (found) {
+      handleAppointmentClick(found);
+    }
+  };
+
   const closeAppointmentModal = () => {
     setSelectedAppointment(null);
     setShowAppointmentModal(false);
@@ -378,12 +439,24 @@ const AdminAgendaHoje = () => {
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Calendar className="h-4 w-4" />
-                  {viewMode === 'day' 
-                    ? formatDate(selectedDate) 
-                    : `${format(startOfWeek(selectedDate, { weekStartsOn: 1 }), "dd 'de' MMM", { locale: ptBR })} - ${format(endOfWeek(selectedDate, { weekStartsOn: 1 }), "dd 'de' MMM yyyy", { locale: ptBR })}`}
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="min-w-[200px] justify-start font-normal">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      {viewMode === 'day' 
+                        ? formatDate(selectedDate) 
+                        : `${format(startOfWeek(selectedDate, { weekStartsOn: 1 }), "dd 'de' MMM", { locale: ptBR })} – ${format(endOfWeek(selectedDate, { weekStartsOn: 1 }), "dd 'de' MMM yyyy", { locale: ptBR })}`}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="center">
+                    <CalendarPicker
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => date && setSelectedDate(date)}
+                      locale={ptBR}
+                    />
+                  </PopoverContent>
+                </Popover>
                 
                 <Button 
                   onClick={goToNextDay}
@@ -590,7 +663,6 @@ const AdminAgendaHoje = () => {
                       days={Array.from({ length: 7 }, (_, i) => {
                         const day = addDays(startOfWeek(selectedDate, { weekStartsOn: 1 }), i);
                         const dayISO = format(day, 'yyyy-MM-dd');
-                        // group by staff id
                         const byStaff: Record<string, any[]> = {};
                         staffColumns.forEach(sc => (byStaff[sc.id] = []));
                         appointments.filter(a => a.date === dayISO).forEach(a => {
@@ -609,12 +681,13 @@ const AdminAgendaHoje = () => {
                         });
                         return {
                           dateISO: dayISO,
-                          label: format(day, "EEE dd 'de' MMM", { locale: ptBR }),
+                          label: format(day, "EEE dd/MM", { locale: ptBR }),
                           staff: staffColumns.map(s => ({ id: s.id, name: s.name })),
                           byStaffAppointments: byStaff,
                         };
                       })}
                       compact={compact}
+                      onClickAppointment={handleWeekAppointmentClick}
                     />
                   </CardContent>
                 </Card>
@@ -807,6 +880,15 @@ const AdminAgendaHoje = () => {
                      onClick={closeAppointmentModal}
                    >
                      Fechar
+                   </Button>
+                   <Button
+                     onClick={() => {
+                       closeAppointmentModal();
+                       navigate(`/admin/appointments?id=${selectedAppointment.appointment_id}`);
+                     }}
+                   >
+                     <ExternalLink className="h-4 w-4 mr-2" />
+                     Ver Agendamento
                    </Button>
                  </div>
                </div>
