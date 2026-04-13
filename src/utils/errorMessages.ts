@@ -53,6 +53,23 @@ export const translateErrorMessage = (errorMessage: string): string => {
     return 'Serviço temporariamente indisponível. Tente novamente em alguns minutos.';
   }
   
+  // Phone / OTP errors
+  if (message.includes('phone') && message.includes('already registered')) {
+    return 'Este número de telefone já está cadastrado. Tente fazer login.';
+  }
+
+  if (message.includes('invalid phone')) {
+    return 'Número de telefone inválido. Use o formato internacional (ex: +55 11 99999-9999).';
+  }
+
+  if (message.includes('otp') || message.includes('token has expired') || message.includes('token is invalid')) {
+    return 'Código inválido ou expirado. Solicite um novo código e tente novamente.';
+  }
+
+  if (message.includes('sms') && (message.includes('not enabled') || message.includes('disabled'))) {
+    return 'Autenticação por SMS não está ativada no momento.';
+  }
+
   // Default fallback
   return errorMessage || 'Erro desconhecido. Tente novamente.';
 };

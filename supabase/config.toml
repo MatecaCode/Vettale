@@ -1,1 +1,5 @@
 project_id = "ieotixprkfglummoobkb"
+
+[auth.email.template.confirmation]
+subject = "Confirme seu cadastro na Vettale"
+content_path = "./templates/confirmation.html"

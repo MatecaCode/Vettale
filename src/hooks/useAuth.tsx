@@ -12,6 +12,9 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signUp: (email: string, password: string, name: string, role?: string) => Promise<void>;
+  sendPhoneOtp: (phone: string, name?: string) => Promise<void>;
+  verifyPhoneOtp: (phone: string, token: string) => Promise<void>;
+  signInWithPhonePassword: (phone: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   loading: boolean;
   isAdmin: boolean;
@@ -121,6 +124,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           user_id: user.id,
           name: user.user_metadata?.name || null,
           email: user.email || null,
+          phone: user.user_metadata?.phone || null,
           admin_created: false,
         });
     } catch (err) {
@@ -325,7 +329,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             name,
             role, // This will be used by the handle_new_user trigger
           },
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
@@ -338,6 +342,59 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const translatedError = translateEmailError(error.message || 'Erro ao criar conta');
       setAuthError(translatedError);
       toast.error(translatedError);
+      throw error;
+    }
+  };
+
+  const sendPhoneOtp = async (phone: string, name?: string): Promise<void> => {
+    try {
+      setAuthError(null);
+      const { error } = await supabase.auth.signInWithOtp({
+        phone,
+        options: name ? { data: { name } } : undefined,
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      console.error('Send phone OTP error:', error);
+      const msg = translateEmailError(error.message || 'Erro ao enviar código SMS');
+      setAuthError(msg);
+      toast.error(msg);
+      throw error;
+    }
+  };
+
+  const signInWithPhonePassword = async (phone: string, password: string): Promise<void> => {
+    try {
+      setAuthError(null);
+      const { error } = await supabase.auth.signInWithPassword({ phone, password });
+      if (error) throw error;
+      toast.success('Login realizado com sucesso!');
+      navigate('/');
+    } catch (error: any) {
+      console.error('Phone password sign in error:', error);
+      const msg = translateEmailError(error.message || 'Erro ao fazer login');
+      setAuthError(msg);
+      toast.error(msg);
+      throw error;
+    }
+  };
+
+  const verifyPhoneOtp = async (phone: string, token: string): Promise<void> => {
+    try {
+      setAuthError(null);
+      const { error } = await supabase.auth.verifyOtp({
+        phone,
+        token,
+        type: 'sms',
+      });
+      if (error) throw error;
+      toast.success('Login realizado com sucesso!');
+      navigate('/');
+    } catch (error: any) {
+      console.error('Verify phone OTP error:', error);
+      const msg = translateEmailError(error.message || 'Código inválido ou expirado');
+      setAuthError(msg);
+      toast.error(msg);
       throw error;
     }
   };
@@ -408,6 +465,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signIn,
         signInWithGoogle,
         signUp,
+        sendPhoneOtp,
+        verifyPhoneOtp,
+        signInWithPhonePassword,
         signOut,
         loading,
         isAdmin,

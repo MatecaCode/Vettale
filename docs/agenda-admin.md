@@ -101,3 +101,31 @@ interface AppointmentData {
 ```
 
 Para expor mais dados (ex: raça do pet, telefone do cliente), adicionar ao SELECT em `fetchAppointments()` e ao `transformedData` map.
+
+
+---
+
+## 2026-04-12 — Admin Dashboard Redesign
+
+### O que mudou
+Redesign completo do `AdminDashboard` de uma página de métricas estáticas para um painel operacional orientado a ação.
+
+**Arquivos modificados:**
+- `src/pages/AdminDashboard.tsx` — reescrito integralmente
+- `src/components/admin/PendingApprovalsSection.tsx` — renomeado internamente para `ActionNecessarySection`; agora exibe dois grupos: aprovações pendentes + serviços confirmados passados sem conclusão
+- `src/pages/AdminAppointments.tsx` — tabs agora são URL-driven (`?tab=confirmed` funciona como deep-link)
+- `src/pages/AdminEditBooking.tsx` — slot de horário atual pré-selecionado ao abrir a página de edição
+- `src/App.tsx` — nova rota `/admin/financials`
+- `src/pages/AdminFinancials.tsx` — nova página (rascunho visual com dados fictícios, banner de aviso)
+
+### Decisões e gotchas
+
+**Join bug silencioso:** `PendingApprovalsSection` usava `clients!inner(name)` (inner join) que descartava silenciosamente linhas onde o join falhava → zero itens exibidos apesar de 6 pendentes no banco. Corrigido para `clients:client_id (name)` (left join), seguindo o padrão de `AdminAppointments`.
+
+**Formato de horário:** DB armazena tempo como `"09:00:00"` (HH:MM:SS); API de disponibilidade retorna `"09:00"` (HH:MM). A comparação direta `selectedTime === slot.time` sempre falha. Corrigido usando `toHHMM()` para normalizar antes de comparar, e atualizando `selectedTime` para o formato do slot ao pré-selecionar.
+
+**Gráfico — concluídos vs. confirmados:** Métrica trocada de `status = 'confirmed'` (nunca decresce) para `service_status = 'completed'` (valor operacional real). Períodos adicionados: 7D/30D agrupam por dia; 6M agrupa por semana (início segunda-feira); 1A agrupa por mês.
+
+**KPI "Em Andamento":** Baseado em `service_status = 'in_progress'` para hoje — NOT time-based. Depende do staff atualizar o status manualmente.
+
+**CTA primário:** `Fazer Agendamento` aponta direto para `/admin/manual-booking` (antes passava pelo action center).

@@ -513,6 +513,18 @@ const AdminEditBooking = () => {
 
     setTimeSlots(convertedSlots);
     console.log('🔧 [ADMIN_EDIT_BOOKING] Converted time slots:', convertedSlots.length);
+
+    // Auto-select the slot matching the appointment's current time on first load.
+    // Only runs when no slot has been manually chosen yet (selectedTimeSlot === null in closure).
+    // Using toHHMM to normalize "09:00:00" vs "09:00" format differences.
+    if (selectedTime && !selectedTimeSlot && convertedSlots.length > 0) {
+      const normalizedCurrent = toHHMM(selectedTime);
+      const match = convertedSlots.find((s) => toHHMM(s.time) === normalizedCurrent);
+      if (match) {
+        setSelectedTimeSlot(match);
+        setSelectedTime(match.time); // normalize format so line-960 comparison works
+      }
+    }
   }, [adminTimeSlots]);
 
   // Initialize services on component mount

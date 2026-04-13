@@ -63,6 +63,12 @@ const AdminAppointments = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') || 'pending');
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setSearchParams((prev) => { prev.set('tab', value); return prev; }, { replace: true });
+  };
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
   const [showAppointmentDetail, setShowAppointmentDetail] = useState(false);
   
@@ -720,7 +726,7 @@ const AdminAppointments = () => {
         </div>
 
                  {/* Appointments Tabs */}
-         <Tabs defaultValue="pending" className="space-y-4">
+         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
            <TabsList className="grid w-full grid-cols-5">
              <TabsTrigger value="pending">Pendentes ({pendingAppointments.length})</TabsTrigger>
              <TabsTrigger value="confirmed">Confirmados ({confirmedAppointments.length})</TabsTrigger>
