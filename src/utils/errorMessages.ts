@@ -53,6 +53,15 @@ export const translateErrorMessage = (errorMessage: string): string => {
     return 'Serviço temporariamente indisponível. Tente novamente em alguns minutos.';
   }
   
+  // Rate limit errors
+  if (message.includes('email rate limit') || message.includes('rate limit exceeded')) {
+    return 'Muitos e-mails enviados em pouco tempo. Aguarde alguns minutos e tente novamente.';
+  }
+
+  if (message.includes('over_email_send_rate_limit') || message.includes('too many requests')) {
+    return 'Limite de envios atingido. Aguarde alguns minutos e tente novamente.';
+  }
+
   // Phone / OTP errors
   if (message.includes('phone') && message.includes('already registered')) {
     return 'Este número de telefone já está cadastrado. Tente fazer login.';

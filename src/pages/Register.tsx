@@ -196,7 +196,11 @@ const Register = () => {
 
       setRegistrationStatus(prev => ({ ...prev, step: 'Criando conta...' }));
 
-      const signUpData: any = { name, phone: phone || null };
+      // Only include phone if the user actually entered a number (more than just the dial code)
+      const cleanPhone = phone.replace(/\D/g, '');
+      const phoneToSave = cleanPhone.length >= 7 ? phone : null;
+
+      const signUpData: any = { name, phone: phoneToSave };
       if (accountType === 'admin') {
         signUpData.admin_registration_code = registrationCode;
       } else if (accountType === 'staff') {
@@ -212,6 +216,18 @@ const Register = () => {
         options: { data: signUpData, emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (authErr) throw authErr;
+
+      // Explicit phone save — belt-and-suspenders in case trigger metadata timing varies
+      if (authData.user && phoneToSave) {
+        try {
+          await supabase
+            .from('clients')
+            .update({ phone: phoneToSave })
+            .eq('user_id', authData.user.id);
+        } catch (phoneErr) {
+          console.warn('Could not save phone to clients row (non-critical):', phoneErr);
+        }
+      }
 
       setRegistrationStatus(prev => ({ ...prev, step: 'Conta criada com sucesso!', isProcessing: false }));
       toast.message('Verifique seu e-mail para confirmar sua conta.');

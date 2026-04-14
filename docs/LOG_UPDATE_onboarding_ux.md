@@ -49,3 +49,31 @@
 
 ## Rollback
 - Revert the above files to the previous commit to restore old behavior.
+
+---
+
+## 2026-04-13 — Wizard redesign & input fixes
+
+### Summary
+- Rebuilt `ClientMicroWizard` from 4 steps → 3 steps (removed emergency contact step from setup flow).
+- Added a welcome screen (step 0) before form steps begin.
+- Replaced plain dropdowns with interactive card/chip selectors for contact channel preference.
+- Added smooth slide animation between steps with direction awareness.
+- Progress indicator redesigned as pill-shaped step labels with connecting lines.
+- Consent items are now full clickable cards (not checkbox rows); added "Aceitar todos" shortcut.
+- Buttons slimmed down (`h-7`/`h-8`) to reduce visual weight.
+- Marketing source field now shows amber border + inline hint when empty.
+- Reminder consent copy changed to "Via telefone / e-mail — conforme canal configurado".
+- Profile completion meter redesigned: raw DB field names replaced by friendly section chips (Informações básicas, Contato, Termos aceitos, Contato de emergência, Preferências).
+- `DateInputBR`: fixed Ctrl+A / Ctrl+C / Ctrl+V / Ctrl+Z being blocked by key filter.
+- `PhoneInputBR`: added E.164 / international number support — numbers starting with `+` bypass BR formatting and are stored as-is.
+
+### Gotchas
+- `startAt: 'emergency'` no longer routes to a dedicated step; it now falls through to `contact` (step 1). The `emergency_contact_*` fields are still saved via the data model if present in `initialValues`.
+- Profile.tsx `startAt` prop hardcoded to `'contact'` (emergency routing removed).
+
+### Files touched
+- `src/components/ClientMicroWizard.tsx` — full redesign
+- `src/pages/Profile.tsx` — updated `renderProgressMeter`, removed emergency `startAt` logic
+- `src/components/inputs/DateInputBR.tsx` — allow Ctrl/Cmd shortcuts in keydown handler
+- `src/components/inputs/PhoneInputBR.tsx` — E.164 / international number support

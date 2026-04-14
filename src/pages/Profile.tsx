@@ -651,42 +651,104 @@ const Profile = () => {
   };
 
      const renderProgressMeter = () => {
-     // Hide progress section when profile is 100% complete
-     if (profileProgress.percent_complete === 100) {
-       return null;
-     }
+     if (profileProgress.percent_complete === 100) return null;
 
-     const progressColor = 
-       profileProgress.percent_complete >= 80 ? 'bg-green-500' :
-       profileProgress.percent_complete >= 60 ? 'bg-yellow-500' :
-       'bg-red-500';
+     const pct = profileProgress.percent_complete;
+     const missing = profileProgress.missing_fields || [];
+
+     // Map raw DB field names → friendly section labels
+     const SECTION_MAP: { label: string; fields: string[]; icon: React.ReactNode }[] = [
+       {
+         label: 'Informações básicas',
+         fields: ['name', 'email'],
+         icon: <User className="w-3.5 h-3.5" />,
+       },
+       {
+         label: 'Contato',
+         fields: ['phone', 'preferred_channel', 'marketing_source', 'birth_date'],
+         icon: <Phone className="w-3.5 h-3.5" />,
+       },
+       {
+         label: 'Termos aceitos',
+         fields: ['basic_consents'],
+         icon: <Shield className="w-3.5 h-3.5" />,
+       },
+       {
+         label: 'Contato de emergência',
+         fields: ['emergency_contact_name', 'emergency_contact_phone'],
+         icon: <Heart className="w-3.5 h-3.5" />,
+       },
+       {
+         label: 'Preferências',
+         fields: ['preferred_staff_profile_id', 'accessibility_notes'],
+         icon: <Sparkles className="w-3.5 h-3.5" />,
+       },
+     ];
+
+     const sections = SECTION_MAP.map(s => ({
+       ...s,
+       complete: !s.fields.some(f => missing.includes(f)),
+     }));
+
+     const incompleteSections = sections.filter(s => !s.complete);
+
+     const gradientColor =
+       pct >= 80 ? 'from-brand-success/10 to-emerald-50' :
+       pct >= 50 ? 'from-brand-warning/10 to-amber-50' :
+       'from-brand-accent to-blue-50';
+
+     const barColor =
+       pct >= 80 ? 'bg-brand-success' :
+       pct >= 50 ? 'bg-brand-warning' :
+       'bg-brand-primary';
 
      return (
-       <Card className="mb-6 border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
-         <CardContent className="p-4">
+       <Card className={`mb-6 overflow-hidden border border-gray-100 bg-gradient-to-br ${gradientColor}`}>
+         <CardContent className="p-5">
+           {/* Header row */}
            <div className="flex items-center justify-between mb-3">
-             <div className="flex items-center space-x-2">
-               <TrendingUp className="w-5 h-5 text-blue-600" />
-               <h3 className="font-semibold text-gray-800">Completude do Perfil</h3>
+             <div className="flex items-center gap-2">
+               <TrendingUp className="w-4 h-4 text-brand-primary" />
+               <span className="font-semibold text-brand-neutral text-sm">Completude do Perfil</span>
              </div>
-             <Badge variant={profileProgress.percent_complete >= 80 ? 'default' : 'secondary'}>
-               {isLoading ? 'Carregando...' : `${profileProgress.percent_complete}% completo`}
-             </Badge>
+             <span className={`text-sm font-bold tabular-nums ${
+               pct >= 80 ? 'text-brand-success' : pct >= 50 ? 'text-brand-warning' : 'text-brand-primary'
+             }`}>
+               {isLoading ? '…' : `${pct}%`}
+             </span>
            </div>
-           
-           <Progress value={profileProgress.percent_complete} className="h-2 mb-2" />
-           
-           {profileProgress.percent_complete < 100 && profileProgress.missing_fields.length > 0 && (
-             <p className="text-sm text-gray-600">
-               <AlertCircle className="w-4 h-4 inline mr-1" />
-               Campos pendentes: {profileProgress.missing_fields.join(', ')}
-             </p>
-           )}
-           
-           {profileProgress.percent_complete >= 80 && (
-             <p className="text-sm text-green-600">
-               <CheckCircle className="w-4 h-4 inline mr-1" />
-               Seu perfil está bem completo!
+
+           {/* Segmented progress bar */}
+           <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-4">
+             <div
+               className={`h-full rounded-full transition-all duration-700 ease-out ${barColor}`}
+               style={{ width: `${pct}%` }}
+             />
+           </div>
+
+           {/* Section chips */}
+           <div className="flex flex-wrap gap-2">
+             {sections.map(s => (
+               <div
+                 key={s.label}
+                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                   s.complete
+                     ? 'bg-brand-success/15 text-brand-success'
+                     : 'bg-white border border-gray-200 text-gray-500'
+                 }`}
+               >
+                 {s.complete
+                   ? <CheckCircle className="w-3 h-3" />
+                   : <AlertCircle className="w-3 h-3 text-brand-warning" />}
+                 {s.label}
+               </div>
+             ))}
+           </div>
+
+           {/* CTA if incomplete */}
+           {incompleteSections.length > 0 && (
+             <p className="text-xs text-gray-500 mt-3">
+               Complete: {incompleteSections.map(s => s.label).join(', ')}
              </p>
            )}
          </CardContent>
@@ -1221,7 +1283,7 @@ const Profile = () => {
           onClose={handleMicroWizardClose}
           onComplete={handleMicroWizardComplete}
           currentUserName={clientData?.name || ''}
-          startAt={(profileProgress.missing_fields && profileProgress.missing_fields.some(f => ['emergency_contact_name','emergency_contact_phone'].includes(f))) ? 'emergency' : 'contact'}
+          startAt="contact"
           initialValues={{
             phone: clientData?.phone || '',
             is_whatsapp: clientData?.is_whatsapp || false,

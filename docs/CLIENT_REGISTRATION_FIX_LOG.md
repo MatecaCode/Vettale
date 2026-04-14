@@ -81,3 +81,27 @@ All timestamps use `America/Sao_Paulo` timezone as per project standards.
 *Log Date: August 24, 2025*  
 *Issue Scope: Client Registration / Database Triggers*  
 *Solution: Database trigger function update + data cleanup*
+
+---
+
+## Session — 2026-04-13
+
+### Auth & Registration Overhaul
+
+**What changed:**
+- **Email confirmation template** — Created `supabase/templates/confirmation.html` with full Vettale branding; `config.toml` updated to set subject to "Confirme seu cadastro na Vettale". Production requires manual paste into Supabase Dashboard → Auth → Email Templates + custom SMTP via Resend to replace "Supabase Auth" sender name.
+- **Email redirect fixed** — `emailRedirectTo` was pointing to `/` (root), so email confirmation tokens were never exchanged for a session. Changed to `/auth/callback` in `useAuth.tsx` and `Register.tsx`. Updated `AuthCallback.tsx` to handle PKCE `?code=` param via `exchangeCodeForSession()` — users now auto-login after confirming email.
+- **Phone input component** — New `src/components/ui/phone-input.tsx` with emoji flag country selector (27 countries, defaults to 🇧🇷 +55), emits E.164 format.
+- **Phone number saved on registration** — `phone` was never reaching the DB. Fixed at three layers: (1) passed in `signUp` metadata, (2) `handle_unified_registration` trigger updated to read `raw_user_meta_data->>'phone'` and write to `clients.phone`, (3) explicit `clients.update({ phone })` after signUp as failsafe. Validation: only saves if ≥7 digits (prevents bare dial codes).
+- **Register page restructured** — Cliente form now unified: name, email, password, phone (always visible), then verification method selector (E-mail card / Telefone card). Phone verification shows "not available" notice and disables submit until SMS provider (Twilio) is configured.
+- **Login page** — Added E-mail / Telefone tabs. Phone tab: country selector + number + password (`signInWithPhonePassword`). SMS OTP removed from login to reduce UI clutter. "Not active" notice shown on phone tab until Twilio is configured.
+- **useAuth additions** — `sendPhoneOtp`, `verifyPhoneOtp`, `signInWithPhonePassword` methods added.
+- **Error messages** — Added PT-BR translations for rate limit errors and phone/OTP errors in `errorMessages.ts`.
+
+**Gotchas:**
+- Supabase free tier: ~3 emails/hour project-wide. Hitting this gives "email rate limit exceeded" — not an account-conflict error. Fix: configure custom SMTP with Resend.
+- Phone login/signup requires an SMS provider (Twilio recommended). Until configured, phone verification is intentionally disabled in UI.
+- `ON CONFLICT (user_id)` in trigger uses `COALESCE(user_phone, clients.phone)` — won't overwrite an existing phone with null.
+
+**Files touched:**
+`supabase/config.toml`, `supabase/templates/confirmation.html`, `supabase/migrations/save_phone_on_client_registration.sql`, `src/hooks/useAuth.tsx`, `src/pages/Login.tsx`, `src/pages/Register.tsx`, `src/pages/AuthCallback.tsx`, `src/components/ui/phone-input.tsx`, `src/utils/errorMessages.ts`

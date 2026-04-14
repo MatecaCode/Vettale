@@ -107,7 +107,12 @@ export const DateInputBR: React.FC<DateInputBRProps> = ({
     if (['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
       return;
     }
-    
+
+    // Allow keyboard shortcuts (Ctrl/Cmd + A/C/V/X/Z)
+    if (e.ctrlKey || e.metaKey) {
+      return;
+    }
+
     // Allow only digits
     if (!/\d/.test(e.key)) {
       e.preventDefault();
