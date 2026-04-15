@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Combobox } from '@/components/ui/combobox';
 import { PetDobPicker } from '@/components/calendars/pet/PetDobPicker';
+import { PetPhotoUpload } from '@/components/pet/PetPhotoUpload';
 import { ArrowLeft, Save, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBreeds } from '@/hooks/useBreeds';
@@ -39,6 +40,7 @@ const PetFormPage = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [birthDate, setBirthDate] = useState<Date | undefined>();
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     breed_id: '',
@@ -82,6 +84,10 @@ const PetFormPage = () => {
         
         if (data.birth_date) {
           setBirthDate(new Date(data.birth_date));
+        }
+
+        if (data.photo_url) {
+          setPhotoUrl(data.photo_url);
         }
       }
     } catch (error: any) {
@@ -162,6 +168,7 @@ const PetFormPage = () => {
         weight: formData.weight ? parseFloat(formData.weight.toString()) : null,
         gender: formData.gender || null,
         notes: formData.notes || null,
+        photo_url: photoUrl || null,
         client_id: clientData.id
       };
 
@@ -249,7 +256,18 @@ const PetFormPage = () => {
            </div>
            <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/20 shadow-lg p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
-                             {/* Pet Name */}
+              {/* Pet Photo */}
+              <div className="w-full flex flex-col items-center pb-2">
+                <PetPhotoUpload
+                  userId={user?.id ?? ''}
+                  petId={petId}
+                  currentPhotoUrl={photoUrl}
+                  onPhotoChange={setPhotoUrl}
+                  petName={formData.name}
+                />
+              </div>
+
+              {/* Pet Name */}
                <div className="space-y-2">
                  <Label htmlFor="name" className="text-base font-normal text-gray-700">
                    Nome do Pet *
@@ -305,8 +323,10 @@ const PetFormPage = () => {
                      setBirthDate(date);
                      if (errors.birth_date) setErrors({...errors, birth_date: ''});
                    }}
-                   className={`w-full h-12 ${errors.birth_date ? 'border-red-500' : ''}`}
+                   placeholder="DD/MM/AAAA"
+                   className={`w-full ${errors.birth_date ? '[&_input]:border-red-500' : ''}`}
                  />
+                 <p className="text-xs text-gray-400">Digite a data ou clique no ícone do calendário</p>
                  {errors.birth_date && (
                    <div className="flex items-center gap-2 text-red-500 text-sm mt-1">
                      <AlertCircle className="w-4 h-4" />
@@ -347,8 +367,9 @@ const PetFormPage = () => {
                 </div>
 
                                  <div className="space-y-2">
-                   <Label htmlFor="weight" className="text-base font-normal text-gray-700">
+                   <Label htmlFor="weight" className="text-base font-normal text-gray-700 flex items-center gap-2">
                      Peso (kg)
+                     <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">opcional</span>
                    </Label>
                   <Input
                     id="weight"
@@ -359,6 +380,7 @@ const PetFormPage = () => {
                     placeholder="Ex: 15.5"
                     className="h-12 text-base"
                   />
+                  <p className="text-xs text-gray-400">Não sabe o peso? Sem problema! Seu pet pode ser pesado na chegada.</p>
                 </div>
               </div>
 

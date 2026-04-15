@@ -423,3 +423,88 @@ const handlePasswordSubmit = async (e: React.FormEvent) => {
 **Total Development Time:** ~1.5 hours  
 **Result:** Flexible client creation + secure account claiming with password setup
 
+---
+
+## 2026-04-14 — Pet Registration & Profile UX Overhaul
+
+### What changed
+**Pet form (`PetFormPage.tsx`)**
+- Breed field replaced with inline searchable autocomplete (type to filter, click to select) — old Popover/Button combobox removed
+- Date of birth field decoupled from calendar popover; input now accepts direct typing in `DD/MM/AAAA` format; Enter key no longer accidentally submits the form
+- Weight field marked optional with a friendly helper note ("Não sabe o peso? Seu pet pode ser pesado na chegada")
+- Size (Porte) dropdown kept as-is; weight ranges removed — size is assessed by staff in person, not by weight
+- Pet profile photo upload added at the top of the form (circle preview, 160px, drag-and-drop or click)
+
+**Photo storage (Supabase)**
+- New `pet-photos` storage bucket: public reads, authenticated writes scoped to `{user_id}/` folder, 5 MB limit, image MIME types only (jpeg/png/webp/gif enforced at bucket level)
+- `photo_url` column on `pets` table was already present — no migration needed
+- File path pattern: `pet-photos/{user_id}/{pet_id}.{ext}`
+
+**Pet list page (`Pets.tsx`)**
+- Cards redesigned as portrait-style profile cards: full-width photo banner (`h-64`) at the top, info grid below
+- Photo crops with `object-top` to anchor to the pet's face
+- Edit/delete buttons float on the photo, visible on hover only
+- Gender displayed in Portuguese (Macho/Fêmea)
+- Dynamic grid layout based on pet count: 1→centered single card, 2→2-col max-w-2xl, 4→2-col max-w-3xl, 3/5+→responsive 3-col
+- No-photo state shows gradient tile with camera icon + "Adicionar foto" (clicking opens edit form)
+
+**`combobox.tsx`** — fully rewritten as inline autocomplete input (not a Popover); used only in client pet form
+
+**`PetDobPicker.tsx`** — restructured so the text input and calendar icon are independent; calendar only opens via icon click
+
+### Gotchas
+- The `Combobox` component in `src/components/ui/combobox.tsx` is used only by `PetFormPage` and the unused `PetForm.tsx`; admin flows use the separate `BreedCombobox` component and were not touched
+- Storage upsert (re-uploading a photo) requires INSERT + SELECT + UPDATE policies — all three are set
+- For new pets, the photo uploads before the pet has a DB id; the storage path uses a `temp_{timestamp}` filename until the pet is saved. On edit, the pet id is used directly
+
+---
+
+## 2026-04-14 — Client Booking Flow: Beta Launch Prep + Pricing Fixes
+
+### What changed
+
+**Beta notice (`Book.tsx`)**
+- Amber banner added at the top of the live booking form explaining the system is in beta; bookings are valid but will be confirmed via phone/email by the clinic
+
+**Secondary service deselect (`BasicInfoForm.tsx`)**
+- Added "Nenhum serviço adicional" option to the secondary service (Tosa) selector so clients can undo a Tosa selection after making one
+
+**Past time-slot filtering (`DateTimeForm.tsx`)**
+- When today's date is selected, time slots whose `HH:MM` is ≤ current local time are automatically marked unavailable (same visual treatment as booked slots — faded + ✕)
+- Uses browser local time; does not affect any date other than today
+
+**"Próximo Disponível" tab (`DateTimeForm.tsx`)**
+- Replaced live-loading logic with a blurred placeholder + "Funcionalidade em desenvolvimento" overlay; directs users to use the calendar tab instead
+
+**Pricing fix — `breed_id` vs `breed` name bug (`useAppointmentForm.tsx`, `pricingService.ts`)**
+- `service_pricing.breed` stores breed names (e.g. "Yorkshire Terrier"), not UUIDs; `useAppointmentForm` was incorrectly passing `selectedPet.breed_id` (UUID) to `PricingService`, causing every exact-match lookup to fail and fall through to service-default prices
+- Fixed: both `pricingParams` and the inline secondary pricing call at submit time now use `selectedPet.breed` (name string)
+- Primary pricing is now also re-fetched fresh at submit time instead of relying solely on the reactive hook state, eliminating a race-condition edge case
+
+**RPC fix — `appointment_services` always used default prices/durations (`create_booking_atomic`)**
+- Even when the frontend sent correct calculated values, `appointment_services` rows were always inserted with `services.base_price` / `services.default_duration` (never breed/size-specific values)
+- Fixed via DB migration: `create_booking_atomic` and `create_booking_client` now accept four new optional params (`_primary_price`, `_primary_duration`, `_secondary_price`, `_secondary_duration`) and use them — falling back to service defaults only when null
+- Migration: `fix_per_service_pricing_in_appointment_services`, `fix_create_booking_client_per_service_params`
+
+**First-visit price range — breed-scoped (`firstVisitPricing.ts`, `BasicInfoForm.tsx`)**
+- Previously showed min/max across ALL breeds (e.g. Fox Terrier R$37 → Samoieda R$134), making the range meaningless for any specific dog
+- Now queries min/max only for the pet's actual breed across all sizes (e.g. Yorkshire Terrier Banho R$52–R$55); falls back to all-breed range only if the breed has no rows for that service
+- `getServicePriceRange` updated to accept optional `breedName`; `BasicInfoForm` passes `selectedPet.breed` and adds it to the effect dependency array
+
+**Service selection UX overhaul (`BasicInfoForm.tsx`)**
+- Dropdown replaced with animated clickable cards: 2-column grid, emoji per service type, color-coded per category, hover lift + shadow, active scale-down, checkmark on selected card
+- Secondary service uses the same compact card style with a 🚫 "Nenhum" option always visible
+- Resumo section redesigned with a gradient card, clean price rows with duration, and a bold total line
+- "A partir de R$" labels removed from all service options — pricing lives only in the Resumo
+
+### Known issue — ⚠️ Needs investigation
+- **Client-side booking submissions are returning errors** when attempting to complete a booking end-to-end as a client user. Root cause not yet identified. Likely related to the RPC parameter changes (`_primary_price` / `_primary_duration` etc.) or a type mismatch between the frontend call and the updated Postgres function signature. Needs a dedicated debugging session.
+
+### Files touched
+- `src/pages/Book.tsx`
+- `src/components/appointment/BasicInfoForm.tsx`
+- `src/components/appointment/DateTimeForm.tsx`
+- `src/hooks/useAppointmentForm.tsx`
+- `src/utils/firstVisitPricing.ts`
+- DB migrations: `fix_per_service_pricing_in_appointment_services`, `fix_create_booking_client_per_service_params`
+

@@ -5,7 +5,7 @@ import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, Trash2, Edit, PawPrint, Heart, Sparkles, Loader2 } from 'lucide-react';
+import { PlusCircle, Trash2, Edit, PawPrint, Heart, Camera, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ interface Pet {
   weight?: number;
   gender?: string;
   notes?: string;
+  photo_url?: string | null;
 }
 
 const Pets = () => {
@@ -246,88 +247,111 @@ const Pets = () => {
           </div>
 
           {/* Content Section */}
-          <div className={`transition-all duration-1000 delay-400 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className={`w-full transition-all duration-1000 delay-400 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             {isLoading ? (
               <div className="text-center py-16">
                 <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#6BAEDB] border-t-[#2B70B2] mx-auto mb-6"></div>
                 <p className="text-lg font-medium text-[#1A4670]">Carregando pets...</p>
               </div>
             ) : pets.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className={
+                pets.length === 1
+                  ? 'flex justify-center'
+                  : pets.length === 2
+                  ? 'grid grid-cols-2 max-w-2xl mx-auto gap-8'
+                  : pets.length === 4
+                  ? 'grid grid-cols-2 max-w-3xl mx-auto gap-8'
+                  : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8'
+              }>
                 {pets.map((pet, index) => (
-                  <Card 
-                    key={pet.id} 
-                    className={`group hover:shadow-xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm shadow-lg transform hover:scale-105 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                  <Card
+                    key={pet.id}
+                    className={`group hover:shadow-2xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm shadow-lg overflow-hidden ${
+                      pets.length === 1 ? 'w-full max-w-sm' : ''
+                    } ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
                     style={{ transitionDelay: `${500 + index * 100}ms` }}
                   >
-                    <CardHeader className="pb-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-br from-[#8FBF9F] to-[#6BAEDB] rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                            <PawPrint className="w-6 h-6 text-white" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-xl font-bold text-[#1A4670]">{pet.name}</CardTitle>
-                            <CardDescription className="text-[#334155]">Seu companheiro peludo</CardDescription>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEditPet(pet)}
-                            className="bg-white hover:bg-[#E7F0FF] border-[#6BAEDB] hover:border-[#2B70B2] text-[#2B70B2] hover:text-[#1A4670] transition-all duration-200"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => deletePet(pet.id)}
-                            className="bg-[#DC2626] hover:bg-[#B91C1C] transition-all duration-200"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {pet.breed && (
-                        <div className="flex items-center space-x-2">
-                          <Badge className="bg-gradient-to-r from-[#2B70B2] to-[#6BAEDB] text-white border-0">
-                            {pet.breed}
-                          </Badge>
+                    {/* Photo banner */}
+                    <div className="relative h-64 w-full overflow-hidden">
+                      {pet.photo_url ? (
+                        <img
+                          src={pet.photo_url}
+                          alt={pet.name}
+                          className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full bg-gradient-to-br from-[#8FBF9F] to-[#6BAEDB] flex flex-col items-center justify-center gap-2 cursor-pointer"
+                          onClick={() => handleEditPet(pet)}
+                        >
+                          <Camera className="w-10 h-10 text-white/70" />
+                          <span className="text-sm text-white/80 font-medium">Adicionar foto</span>
                         </div>
                       )}
-                      <div className="space-y-2">
-                        {pet.age && (
-                          <div className="flex items-center space-x-2 text-sm">
-                            <span className="text-[#334155] font-medium">Idade:</span>
-                            <span className="text-[#1A4670]">{pet.age}</span>
-                          </div>
+
+                      {/* Action buttons overlay */}
+                      <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditPet(pet)}
+                          className="bg-white/90 hover:bg-white border-0 text-[#2B70B2] hover:text-[#1A4670] shadow-md h-8 w-8 p-0"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deletePet(pet.id)}
+                          className="bg-[#DC2626]/90 hover:bg-[#DC2626] border-0 shadow-md h-8 w-8 p-0"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <CardContent className="pt-5 pb-6 px-6 space-y-4">
+                      {/* Name + breed */}
+                      <div>
+                        <h3 className="text-2xl font-bold text-[#1A4670] leading-tight">{pet.name}</h3>
+                        {pet.breed && (
+                          <Badge className="mt-2 bg-gradient-to-r from-[#2B70B2] to-[#6BAEDB] text-white border-0 text-xs">
+                            {pet.breed}
+                          </Badge>
                         )}
+                      </div>
+
+                      {/* Info grid */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                         {pet.size && (
-                          <div className="flex items-center space-x-2 text-sm">
-                            <span className="text-[#334155] font-medium">Porte:</span>
-                            <span className="text-[#1A4670]">{pet.size}</span>
-                          </div>
-                        )}
-                        {pet.weight && (
-                          <div className="flex items-center space-x-2 text-sm">
-                            <span className="text-[#334155] font-medium">Peso:</span>
-                            <span className="text-[#1A4670]">{pet.weight}kg</span>
+                          <div>
+                            <p className="text-gray-400 text-xs uppercase tracking-wide font-medium">Porte</p>
+                            <p className="text-[#1A4670] font-medium capitalize">{pet.size}</p>
                           </div>
                         )}
                         {pet.gender && (
-                          <div className="flex items-center space-x-2 text-sm">
-                            <span className="text-[#334155] font-medium">Gênero:</span>
-                            <span className="text-[#1A4670]">{pet.gender}</span>
+                          <div>
+                            <p className="text-gray-400 text-xs uppercase tracking-wide font-medium">Sexo</p>
+                            <p className="text-[#1A4670] font-medium capitalize">{pet.gender === 'male' ? 'Macho' : pet.gender === 'female' ? 'Fêmea' : pet.gender}</p>
+                          </div>
+                        )}
+                        {pet.age && (
+                          <div>
+                            <p className="text-gray-400 text-xs uppercase tracking-wide font-medium">Idade</p>
+                            <p className="text-[#1A4670] font-medium">{pet.age}</p>
+                          </div>
+                        )}
+                        {pet.weight && (
+                          <div>
+                            <p className="text-gray-400 text-xs uppercase tracking-wide font-medium">Peso</p>
+                            <p className="text-[#1A4670] font-medium">{pet.weight} kg</p>
                           </div>
                         )}
                       </div>
+
                       {pet.notes && (
-                        <div className="pt-2 border-t border-[#E7F0FF]">
-                          <p className="text-sm text-[#334155] italic">"{pet.notes}"</p>
+                        <div className="pt-3 border-t border-[#E7F0FF]">
+                          <p className="text-sm text-[#334155] italic leading-relaxed">"{pet.notes}"</p>
                         </div>
                       )}
                     </CardContent>

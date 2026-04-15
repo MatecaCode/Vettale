@@ -142,6 +142,17 @@ const DateTimeForm: React.FC<DateTimeFormProps> = ({
     setSelectedTimeSlotId(null);
   };
 
+  // Returns true when the selected date is the current calendar day (local time)
+  const isSelectedDateToday = React.useMemo(() => {
+    if (!date) return false;
+    const now = new Date();
+    return (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    );
+  }, [date]);
+
   // Render available time slot buttons
   const renderTimeSlots = () => {
     if (!timeSlots || timeSlots.length === 0) {
@@ -149,23 +160,34 @@ const DateTimeForm: React.FC<DateTimeFormProps> = ({
     }
 
     return timeSlots.map((slot) => {
+      // If today is selected, check whether the slot time has already passed
+      let isPast = false;
+      if (isSelectedDateToday) {
+        const [slotHour, slotMin] = slot.time.split(':').map(Number);
+        const slotDateTime = new Date();
+        slotDateTime.setHours(slotHour, slotMin, 0, 0);
+        isPast = slotDateTime <= new Date();
+      }
+
+      const effectivelyUnavailable = !slot.available || isPast;
+
       return (
         <Button
           key={slot.id}
           type="button"
           variant={selectedTimeSlotId === slot.id ? "default" : "outline"}
           className={`h-auto py-2 transition-all duration-200 hover:scale-105 ${
-            slot.available ? '' : 'opacity-50 cursor-not-allowed'
+            effectivelyUnavailable ? 'opacity-40 cursor-not-allowed' : ''
           }`}
           onClick={() => {
-            if (slot.available) {
+            if (!effectivelyUnavailable) {
               setSelectedTimeSlotId(slot.id);
             }
           }}
-          disabled={!slot.available || isLoading}
+          disabled={effectivelyUnavailable || isLoading}
         >
           {slot.time}
-          {!slot.available && <span className="ml-1 text-xs">✕</span>}
+          {effectivelyUnavailable && <span className="ml-1 text-xs">✕</span>}
         </Button>
       );
     });
@@ -269,31 +291,23 @@ const DateTimeForm: React.FC<DateTimeFormProps> = ({
         </TabsContent>
 
         <TabsContent value="next-available" className="space-y-4 animate-slide-in-right">
-          {nextAvailable ? (
-            <div className="p-4 border rounded-lg hover:shadow-md transition-all duration-200">
+          <div className="relative rounded-md border overflow-hidden">
+            {/* Blurred placeholder content */}
+            <div className="p-6 filter blur-sm opacity-40 pointer-events-none select-none">
               <h3 className="font-semibold mb-2">Próximo horário disponível</h3>
-              <p className="text-sm text-muted-foreground mb-2">
-                {format(new Date(nextAvailable.date), "EEEE, d 'de' MMMM", { locale: ptBR })} às {nextAvailable.time}
-              </p>
-              {nextAvailable.provider_name && (
-                <p className="text-sm text-muted-foreground mb-4">
-                  Com: {nextAvailable.provider_name}
-                </p>
-              )}
-              <Button 
-                type="button" 
-                onClick={handleNextAvailableSelect}
-                disabled={isLoading}
-                className="hover-scale"
-              >
-                Selecionar este horário
-              </Button>
+              <p className="text-sm text-muted-foreground mb-1">Sexta-feira, 17 de abril às 10:00</p>
+              <p className="text-sm text-muted-foreground mb-4">Com: Profissional</p>
+              <div className="h-9 w-40 rounded-md bg-primary/30" />
             </div>
-          ) : (
-            <p className="text-muted-foreground">
-              Carregando próximos horários disponíveis...
-            </p>
-          )}
+            {/* Overlay */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-[2px] px-6 text-center">
+              <Clock className="w-8 h-8 text-muted-foreground mb-3" />
+              <p className="font-semibold text-gray-700 mb-1">Funcionalidade em desenvolvimento</p>
+              <p className="text-sm text-muted-foreground">
+                Em breve você poderá usar esta opção. Por enquanto, por favor escolha uma data pelo calendário ao lado.
+              </p>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

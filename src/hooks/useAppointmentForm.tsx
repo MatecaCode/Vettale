@@ -104,9 +104,10 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
   }, [timeSlots]);
 
   // Get pricing for current pet/service combination
+  // Use breed name (text) not breed_id (UUID) — service_pricing.breed stores names
   const pricingParams = selectedPet && selectedService ? {
     serviceId: selectedService.id,
-    breedId: selectedPet.breed_id,
+    breedId: selectedPet.breed,
     size: selectedPet.size
   } : null;
 
@@ -254,30 +255,39 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
       }
 
       const dateStr = date.toISOString().split('T')[0];
-      const primaryDuration = pricing?.duration || selectedService.default_duration || 60;
 
-      // Item 22: first-visit pets get NULL price — the clinic will quote after
-      // the in-person evaluation. The create_booking_client RPC accepts null for
-      // _calculated_price (DEFAULT NULL::numeric) so this is safe to pass through.
-      // Admin bookings always bypass this check (they use AdminManualBooking).
+      // Item 22: first-visit pets get NULL price — the clinic will quote after evaluation.
       const isFirstVisit = selectedPet.is_first_visit === true;
 
-      // If secondary service is selected and allowed, calculate combined price/duration
-      let calculatedPrice: number | null = isFirstVisit
-        ? null
-        : (pricing?.price || selectedService.base_price || 0);
-      let calculatedDuration = primaryDuration;
+      // Always compute pricing fresh at submit time using breed name (not UUID).
+      // This avoids stale hook state and the breed_id vs breed name mismatch.
+      const primaryPricingResult = await PricingService.calculatePricing({
+        serviceId: selectedService.id,
+        breedId: selectedPet.breed,
+        size: selectedPet.size || undefined
+      });
+
+      const primaryPrice: number = primaryPricingResult?.price ?? (selectedService.base_price ?? 0);
+      const primaryDuration: number = primaryPricingResult?.duration ?? (selectedService.default_duration ?? 60);
+
+      let secondaryPrice = 0;
+      let secondaryDuration = 0;
 
       const primaryCategory = getServiceCategory(selectedService as any);
       if (!isFirstVisit && primaryCategory === 'BATH' && selectedSecondaryService) {
         const sec = await PricingService.calculatePricing({
           serviceId: selectedSecondaryService.id,
-          breedId: selectedPet.breed_id,
+          breedId: selectedPet.breed,
           size: selectedPet.size || undefined
         });
-        calculatedPrice = (calculatedPrice as number) + (sec?.price || 0);
-        calculatedDuration = calculatedDuration + (sec?.duration || 0);
+        secondaryPrice = sec?.price ?? 0;
+        secondaryDuration = sec?.duration ?? 0;
       }
+
+      const calculatedPrice: number | null = isFirstVisit
+        ? null
+        : primaryPrice + secondaryPrice;
+      const calculatedDuration = primaryDuration + secondaryDuration;
       
       const appointmentData = {
         client_id: clientData.id,
@@ -307,7 +317,11 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
           _time_slot: selectedTimeSlotId,
           _notes: notes || null,
           _calculated_price: calculatedPrice,
-          _calculated_duration: calculatedDuration
+          _calculated_duration: calculatedDuration,
+          _primary_price: isFirstVisit ? null : primaryPrice,
+          _primary_duration: primaryDuration,
+          _secondary_price: secondaryPrice > 0 ? secondaryPrice : null,
+          _secondary_duration: secondaryDuration > 0 ? secondaryDuration : null
         });
 
         if (atomicError || !appointmentId) {

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { format, parse, isValid } from "date-fns";
 import { CalendarIcon } from "lucide-react";
-import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,121 +19,132 @@ interface PetDobPickerProps {
   className?: string;
 }
 
+function tryParseDate(input: string): Date | null {
+  const trimmed = input.trim();
+  if (trimmed.length < 8) return null;
+
+  // Brazilian format first (DD/MM/YYYY), then fallbacks
+  const formatsToTry = [
+    "dd/MM/yyyy",
+    "dd-MM-yyyy",
+    "ddMMyyyy",
+  ];
+
+  for (const fmt of formatsToTry) {
+    if (trimmed.length === fmt.replace(/[^a-zA-Z]/g, "").length + (fmt.match(/[^a-zA-Z]/g) || []).length) {
+      const parsed = parse(trimmed, fmt, new Date());
+      if (isValid(parsed) && parsed.getFullYear() > 1900) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
 export function PetDobPicker({
   value,
   onChange,
-  placeholder = "Selecione a data de nascimento",
+  placeholder = "DD/MM/AAAA",
   disabled = false,
   className,
 }: PetDobPickerProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
-  // Internal component identifier: Pet DOB Picker
-
-  // Initialize input value when value changes
   React.useEffect(() => {
-    if (value && !isTyping) {
-      setInputValue(format(value, "dd/MM/yyyy", { locale: ptBR }));
-    } else if (!value && !isTyping) {
+    if (value && !isFocused) {
+      setInputValue(format(value, "dd/MM/yyyy"));
+    } else if (!value && !isFocused) {
       setInputValue("");
     }
-  }, [value, isTyping]);
-
-  const handleSelect = (selectedDate: Date | undefined) => {
-    onChange?.(selectedDate);
-    setOpen(false);
-    setIsTyping(false);
-  };
+  }, [value, isFocused]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setInputValue(newValue);
-    setIsTyping(true);
+    const raw = e.target.value;
+    setInputValue(raw);
 
-    // Try to parse the input as a date
-    const parsedDate = parse(newValue, "dd/MM/yyyy", new Date());
-    if (isValid(parsedDate) && newValue.length === 10) {
+    const parsed = tryParseDate(raw);
+    if (parsed) {
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      // Only allow past dates for pet DOB
-      if (parsedDate <= today) {
-        onChange?.(parsedDate);
+      today.setHours(23, 59, 59, 999);
+      if (parsed <= today) {
+        onChange?.(parsed);
       }
+    } else if (!raw) {
+      onChange?.(undefined);
     }
   };
 
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      const parsedDate = parse(inputValue, "dd/MM/yyyy", new Date());
-      if (isValid(parsedDate)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const parsed = tryParseDate(inputValue);
+      if (parsed) {
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        if (parsedDate <= today) {
-          onChange?.(parsedDate);
-          setOpen(false);
-          setIsTyping(false);
-        } else {
-          // Show error for future dates
-          setInputValue("");
-          setIsTyping(false);
+        today.setHours(23, 59, 59, 999);
+        if (parsed <= today) {
+          onChange?.(parsed);
         }
       }
     }
   };
 
-  const handleInputBlur = () => {
-    setTimeout(() => setIsTyping(false), 100);
+  const handleCalendarSelect = (date: Date | undefined) => {
+    onChange?.(date);
+    if (date) {
+      setInputValue(format(date, "dd/MM/yyyy"));
+    }
+    setOpen(false);
   };
 
-  // Use custom calendar with standardized year range
   return (
-    <div className={cn("pet-dob-picker-wrapper relative", className)}>
+    <div className={cn("relative flex items-center", className)}>
+      <Input
+        value={inputValue}
+        onChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => {
+          setTimeout(() => setIsFocused(false), 150);
+        }}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="pr-10 h-12 text-base"
+        autoComplete="off"
+      />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <div className="relative">
-            <Input
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleInputKeyDown}
-              onBlur={handleInputBlur}
-              onFocus={() => setIsTyping(true)}
-              placeholder={placeholder}
-              className={cn("pl-10", className)}
-              disabled={disabled}
-            />
-            <CalendarIcon 
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 cursor-pointer" 
-              onClick={() => setOpen(true)}
-            />
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 h-full px-3 text-gray-400 hover:text-gray-600 hover:bg-transparent"
+            disabled={disabled}
+            tabIndex={-1}
+          >
+            <CalendarIcon className="h-4 w-4" />
+          </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <PetDobCalendar
-            value={value}
-            onChange={handleSelect}
-          />
+        <PopoverContent className="w-auto p-0" align="end">
+          <PetDobCalendar value={value} onChange={handleCalendarSelect} />
           <div className="flex gap-2 p-3 pt-0">
             <Button
+              type="button"
               variant="outline"
               size="sm"
-              onClick={() => {
-                setOpen(false);
-                setIsTyping(false);
-              }}
+              onClick={() => setOpen(false)}
               className="flex-1"
             >
               Cancelar
             </Button>
             <Button
+              type="button"
               size="sm"
               onClick={() => {
                 onChange?.(value);
                 setOpen(false);
-                setIsTyping(false);
               }}
               className="flex-1"
             >

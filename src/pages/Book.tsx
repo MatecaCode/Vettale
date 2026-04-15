@@ -75,6 +75,15 @@ const Book = () => {
             {/* When in test mode, render the real booking form; otherwise render the demo layout */}
             {isTestMode ? (
               <div className="max-w-7xl mx-auto px-6">
+                {/* Beta notice */}
+                <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
+                  <p className="font-semibold text-amber-800 mb-1">⚠️ Sistema de Agendamento em Beta</p>
+                  <p>
+                    Nosso sistema de agendamento online está em fase beta. Você já pode realizar seu agendamento normalmente — 
+                    assim que recebermos sua solicitação, entraremos em contato com você pelo telefone ou e-mail cadastrado 
+                    na sua conta para confirmar os detalhes e finalizar o agendamento.
+                  </p>
+                </div>
                 {/* Subtle badge */}
                 <div className="mb-6 text-xs text-slate-500 text-center">
                   Modo de teste habilitado

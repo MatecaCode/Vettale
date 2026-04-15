@@ -2,13 +2,19 @@
 // Item 18 & 22 — First Visit Price Range Logic
 //
 // When a pet's is_first_visit = true the clinic cannot quote a fixed price until
-// the groomer evaluates the pet in person. Instead, we show the client the full
-// range (min–max) of service_pricing rows for the selected service so they
-// understand the possible cost before booking.
+// the groomer evaluates the pet in person.  We show the min–max range for the
+// pet's specific breed across all sizes so the client sees a realistic estimate.
+//
+// Range logic:
+//   • min = lowest price for that breed across all sizes for the service
+//   • max = highest price for that breed across all sizes for the service
+//   • If the breed has no rows in service_pricing, falls back to all-breed range.
+//
+// This is shown ONLY when is_first_visit = true.  Returning pets always receive
+// an exact calculated price (their registered size is considered reliable).
 //
 // This file is used exclusively by the CLIENT-FACING booking flow.
-// The admin booking flow bypasses is_first_visit entirely and always uses a
-// fixed calculated price (see AdminManualBooking.tsx / AdminBookingPage.tsx).
+// The admin booking flow bypasses is_first_visit entirely.
 
 import { supabase } from '@/integrations/supabase/client';
 
@@ -18,10 +24,34 @@ export interface PriceRange {
 }
 
 /**
- * Fetches the min and max price across ALL porte/size rows in service_pricing
- * for the given service. Returns null when no valid prices exist for the service.
+ * Fetches the min and max price for a service scoped to a specific breed
+ * (all sizes for that breed).  Falls back to all-breed range when no
+ * breed-specific rows exist.
+ *
+ * @param serviceId  UUID of the service
+ * @param breedName  Breed name string as stored in service_pricing.breed
  */
-export async function getServicePriceRange(serviceId: string): Promise<PriceRange | null> {
+export async function getServicePriceRange(
+  serviceId: string,
+  breedName?: string,
+): Promise<PriceRange | null> {
+  // Step 1 — try breed-specific rows when a breed name is supplied
+  if (breedName) {
+    const { data: breedData, error: breedError } = await supabase
+      .from('service_pricing')
+      .select('price')
+      .eq('service_id', serviceId)
+      .eq('breed', breedName)
+      .not('price', 'is', null)
+      .gt('price', 0);
+
+    if (!breedError && breedData && breedData.length > 0) {
+      const prices = breedData.map((row) => Number(row.price));
+      return { min: Math.min(...prices), max: Math.max(...prices) };
+    }
+  }
+
+  // Step 2 — fall back to all-breed range
   const { data, error } = await supabase
     .from('service_pricing')
     .select('price')
@@ -32,18 +62,15 @@ export async function getServicePriceRange(serviceId: string): Promise<PriceRang
   if (error || !data || data.length === 0) return null;
 
   const prices = data.map((row) => Number(row.price));
-  return {
-    min: Math.min(...prices),
-    max: Math.max(...prices),
-  };
+  return { min: Math.min(...prices), max: Math.max(...prices) };
 }
 
 /**
  * Formats a PriceRange for display in PT-BR.
  * When min === max (single porte), returns a single value instead of a range.
  * Examples:
- *   { min: 45, max: 89 } → "R$ 45,00 – R$ 89,00"
- *   { min: 60, max: 60 } → "R$ 60,00"
+ *   { min: 52, max: 55 } → "R$ 52,00 – R$ 55,00"
+ *   { min: 67, max: 67 } → "R$ 67,00"
  */
 export function formatPriceRange(range: PriceRange): string {
   const fmt = (n: number) =>
