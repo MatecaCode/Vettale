@@ -40,9 +40,8 @@ serve(async (req) => {
 
   try {
     // Auth after preflight
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const authHeader = req.headers.get("authorization") ?? "";
-    const authClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
+    const authClient = createClient(url, serviceKey, { global: { headers: { Authorization: authHeader } } });
     const { data: { user }, error: uerr } = await authClient.auth.getUser();
     if (uerr || !user) {
       return new Response(JSON.stringify({ ok:false, code:"UNAUTHORIZED", reason:"Missing or invalid session" }), { status: 401, headers: { ...h, "content-type":"application/json" } });
