@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { PhoneInput } from '@/components/ui/phone-input';
 import { useAuth } from '@/hooks/useAuth';
+import { translateEmailError } from '@/utils/errorMessages';
 import Layout from '@/components/Layout';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { resendConfirmation } from '@/integrations/supabase/resendConfirmation';
@@ -55,7 +56,7 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true); setError(null);
     try { await signIn(email, password); }
-    catch (err: any) { setError(err.message || 'Falha ao fazer login. Verifique suas credenciais.'); }
+    catch (err: any) { setError(translateEmailError(err.message || 'Erro ao fazer login.')); }
     finally { setIsLoading(false); }
   };
 
@@ -65,7 +66,7 @@ const Login = () => {
     if (phone.length < 8) { setError('Informe um número de telefone válido.'); return; }
     setIsLoading(true); setError(null);
     try { await signInWithPhonePassword(phone, phonePassword); }
-    catch (err: any) { setError(err.message); }
+    catch (err: any) { setError(translateEmailError(err.message || 'Erro ao fazer login.')); }
     finally { setIsLoading(false); }
   };
 

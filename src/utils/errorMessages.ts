@@ -40,8 +40,12 @@ export const translateErrorMessage = (errorMessage: string): string => {
   }
   
   // Network errors
+  if (message.includes('failed to fetch') || message.includes('networkerror') || message.includes('network request failed')) {
+    return 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet e tente novamente. Se o problema persistir, o serviço pode estar temporariamente indisponível.';
+  }
+
   if (message.includes('network') || message.includes('timeout') || message.includes('fetch')) {
-    return 'Erro de conexão. Verifique sua internet e tente novamente.';
+    return 'Erro de conexão com o servidor. Verifique sua internet e tente novamente.';
   }
   
   // Generic errors

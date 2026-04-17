@@ -4,7 +4,7 @@ import type { Database } from './types';
 import type { CustomDatabaseFunctions } from '../../types/supabase-extensions';
 
 const SUPABASE_URL = "https://ieotixprkfglummoobkb.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imllb3RpeHBya2ZnbHVtbW9vYmtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzMjUxNjUsImV4cCI6MjA2NDkwMTE2NX0.hWAxW1tBbMQr3BOPSPOR57eiYvzWzDjaUMjigLyUaGQ";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_hKQ8TsJxHlRcpowuOpIYzQ_vNuW9jXG";
 
 // Merge custom functions with the auto-generated database type
 type ExtendedDatabase = Database & {
