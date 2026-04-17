@@ -10,11 +10,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { PetDobPicker } from '@/components/calendars/pet/PetDobPicker';
 import ClientMicroWizard from '@/components/ClientMicroWizard';
 import { hasRunOnboarding, setOnboardingDone } from '@/utils/onboarding';
-import SmartNudgesBanner from '@/components/SmartNudges';
-import PhoneInputBR from '@/components/inputs/PhoneInputBR';
+import { PhoneInput, COUNTRIES } from '@/components/ui/phone-input';
 import { DateInputBR } from '@/components/inputs/DateInputBR';
 import { 
   Save, Edit, X, Loader2, User, Mail, Calendar, Phone, MapPin, 
@@ -90,6 +90,11 @@ const Profile = () => {
    
   // UX improvements state
   const [showNudgeBanner, setShowNudgeBanner] = useState(true);
+  const [sectionModal, setSectionModal] = useState<string | null>(null);
+  const [isSavingSection, setIsSavingSection] = useState(false);
+  const [profileCompleteSeen, setProfileCompleteSeen] = useState(() =>
+    !!localStorage.getItem(`profileCompleteSeen:${user?.id}`)
+  );
   
   // Consent snapshot state
   const [consentSnapshot, setConsentSnapshot] = useState({
@@ -604,6 +609,45 @@ const Profile = () => {
      setDraftRestored(false);
   };
 
+  const formatPhoneDisplay = (phone: string): string => {
+    if (!phone) return 'Não informado';
+    const country = COUNTRIES.find(c => phone.startsWith(c.dial));
+    if (country) {
+      const local = phone.slice(country.dial.length);
+      return `${country.flag} ${country.dial} ${local}`;
+    }
+    return phone;
+  };
+
+  const saveSectionModal = async () => {
+    if (!user) return;
+    try {
+      setIsSavingSection(true);
+      const { error } = await supabase.rpc('client_update_profile', {
+        p_phone: formData.phone || null,
+        p_is_whatsapp: formData.is_whatsapp,
+        p_preferred_channel_code: formData.preferred_channel_code || 'telefone',
+        p_emergency_contact_name: formData.emergency_contact_name || null,
+        p_emergency_contact_phone: formData.emergency_contact_phone || null,
+        p_preferred_staff_profile_id: formData.preferred_staff_profile_id || null,
+        p_marketing_source_code: formData.marketing_source_code || null,
+        p_marketing_source_other: formData.marketing_source_other || null,
+        p_accessibility_notes: formData.accessibility_notes || null,
+        p_general_notes: formData.general_notes || null,
+        p_birth_date: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
+      });
+      if (error) { toast.error('Erro ao salvar'); return; }
+      setSectionModal(null);
+      await fetchClientData();
+      await loadProfileProgress();
+      toast.success('Salvo com sucesso!');
+    } catch {
+      toast.error('Erro ao salvar');
+    } finally {
+      setIsSavingSection(false);
+    }
+  };
+
   const handleCompletarAgora = () => {
     setShowMicroWizard(true);
     setShowNudgeBanner(false);
@@ -651,46 +695,58 @@ const Profile = () => {
   };
 
      const renderProgressMeter = () => {
-     if (profileProgress.percent_complete === 100) return null;
+     if (profileCompleteSeen) return null;
 
      const pct = profileProgress.percent_complete;
+
+     if (pct === 100) {
+       return (
+         <Card className="mb-6 overflow-hidden border border-green-100 bg-gradient-to-br from-brand-success/10 to-emerald-50">
+           <CardContent className="p-5">
+             <div className="flex items-center justify-between mb-3">
+               <div className="flex items-center gap-2">
+                 <CheckCircle className="w-5 h-5 text-brand-success" />
+                 <div>
+                   <span className="font-semibold text-brand-neutral text-sm">Perfil completo!</span>
+                   <p className="text-xs text-gray-500 mt-0.5">Parabéns, todas as informações foram preenchidas.</p>
+                 </div>
+               </div>
+               <div className="flex items-center gap-3">
+                 <span className="text-lg font-bold text-brand-success">100%</span>
+                 <button
+                   onClick={() => {
+                     localStorage.setItem(`profileCompleteSeen:${user?.id}`, '1');
+                     setProfileCompleteSeen(true);
+                   }}
+                   className="text-gray-400 hover:text-gray-600 transition-colors"
+                   aria-label="Fechar"
+                 >
+                   <X className="w-4 h-4" />
+                 </button>
+               </div>
+             </div>
+             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+               <div className="h-full rounded-full bg-brand-success transition-all duration-700 ease-out w-full" />
+             </div>
+           </CardContent>
+         </Card>
+       );
+     }
+
      const missing = profileProgress.missing_fields || [];
 
-     // Map raw DB field names → friendly section labels
      const SECTION_MAP: { label: string; fields: string[]; icon: React.ReactNode }[] = [
-       {
-         label: 'Informações básicas',
-         fields: ['name', 'email'],
-         icon: <User className="w-3.5 h-3.5" />,
-       },
-       {
-         label: 'Contato',
-         fields: ['phone', 'preferred_channel', 'marketing_source', 'birth_date'],
-         icon: <Phone className="w-3.5 h-3.5" />,
-       },
-       {
-         label: 'Termos aceitos',
-         fields: ['basic_consents'],
-         icon: <Shield className="w-3.5 h-3.5" />,
-       },
-       {
-         label: 'Contato de emergência',
-         fields: ['emergency_contact_name', 'emergency_contact_phone'],
-         icon: <Heart className="w-3.5 h-3.5" />,
-       },
-       {
-         label: 'Preferências',
-         fields: ['preferred_staff_profile_id', 'accessibility_notes'],
-         icon: <Sparkles className="w-3.5 h-3.5" />,
-       },
+       { label: 'Informações básicas', fields: ['name', 'email'], icon: <User className="w-3.5 h-3.5" /> },
+       { label: 'Contato', fields: ['phone', 'preferred_channel', 'marketing_source', 'birth_date'], icon: <Phone className="w-3.5 h-3.5" /> },
+       { label: 'Termos aceitos', fields: ['basic_consents'], icon: <Shield className="w-3.5 h-3.5" /> },
+       { label: 'Contato de emergência', fields: ['emergency_contact_name', 'emergency_contact_phone'], icon: <Heart className="w-3.5 h-3.5" /> },
+       { label: 'Preferências', fields: ['preferred_staff_profile_id', 'accessibility_notes'], icon: <Sparkles className="w-3.5 h-3.5" /> },
      ];
 
      const sections = SECTION_MAP.map(s => ({
        ...s,
        complete: !s.fields.some(f => missing.includes(f)),
      }));
-
-     const incompleteSections = sections.filter(s => !s.complete);
 
      const gradientColor =
        pct >= 80 ? 'from-brand-success/10 to-emerald-50' :
@@ -705,7 +761,6 @@ const Profile = () => {
      return (
        <Card className={`mb-6 overflow-hidden border border-gray-100 bg-gradient-to-br ${gradientColor}`}>
          <CardContent className="p-5">
-           {/* Header row */}
            <div className="flex items-center justify-between mb-3">
              <div className="flex items-center gap-2">
                <TrendingUp className="w-4 h-4 text-brand-primary" />
@@ -718,39 +773,29 @@ const Profile = () => {
              </span>
            </div>
 
-           {/* Segmented progress bar */}
            <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-4">
-             <div
-               className={`h-full rounded-full transition-all duration-700 ease-out ${barColor}`}
-               style={{ width: `${pct}%` }}
-             />
+             <div className={`h-full rounded-full transition-all duration-700 ease-out ${barColor}`} style={{ width: `${pct}%` }} />
            </div>
 
-           {/* Section chips */}
            <div className="flex flex-wrap gap-2">
-             {sections.map(s => (
-               <div
-                 key={s.label}
-                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                   s.complete
-                     ? 'bg-brand-success/15 text-brand-success'
-                     : 'bg-white border border-gray-200 text-gray-500'
-                 }`}
-               >
-                 {s.complete
-                   ? <CheckCircle className="w-3 h-3" />
-                   : <AlertCircle className="w-3 h-3 text-brand-warning" />}
-                 {s.label}
-               </div>
-             ))}
+             {sections.map(s =>
+               s.complete ? (
+                 <div key={s.label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-brand-success/15 text-brand-success">
+                   <CheckCircle className="w-3 h-3" />
+                   {s.label}
+                 </div>
+               ) : (
+                 <button
+                   key={s.label}
+                   onClick={() => setSectionModal(s.label)}
+                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-white border border-brand-warning text-brand-warning hover:bg-amber-50 transition-colors cursor-pointer"
+                 >
+                   <AlertCircle className="w-3 h-3" />
+                   {s.label}
+                 </button>
+               )
+             )}
            </div>
-
-           {/* CTA if incomplete */}
-           {incompleteSections.length > 0 && (
-             <p className="text-xs text-gray-500 mt-3">
-               Complete: {incompleteSections.map(s => s.label).join(', ')}
-             </p>
-           )}
          </CardContent>
        </Card>
      );
@@ -826,17 +871,6 @@ const Profile = () => {
             {renderProgressMeter()}
           </div>
 
-          {/* Smart Nudges Banner */}
-          {showNudgeBanner && (
-            <div className={`transition-all duration-1000 delay-350 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-              <SmartNudgesBanner
-                profileProgress={profileProgress}
-                lastDismissedAt={clientData?.last_nudge_dismissed_at}
-                onRefreshProgress={loadProfileProgress}
-                className="mb-6"
-              />
-            </div>
-          )}
 
           {/* Cards Grid */}
           <div className={`grid grid-cols-1 xl:grid-cols-2 gap-8 transition-all duration-1000 delay-400 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
@@ -1002,26 +1036,15 @@ const Profile = () => {
                       <Label htmlFor="phone" className="text-sm font-medium text-gray-700">Telefone</Label>
                     </div>
                     {isEditing ? (
-                      <PhoneInputBR
+                      <PhoneInput
                         value={formData.phone}
                         onChange={(value) => setFormData({...formData, phone: value})}
-                        placeholder="(11) 99999-9999"
                         className="h-10"
                       />
                     ) : (
                       <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                         <p className="text-sm font-medium text-gray-800">
-                          {clientData?.phone ? 
-                            (() => {
-                              const digits = clientData.phone.replace(/\D/g, '');
-                              if (digits.length === 11) {
-                                return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-                              } else if (digits.length === 10) {
-                                return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-                              }
-                              return clientData.phone;
-                            })() : 'Não informado'
-                          }
+                          {formatPhoneDisplay(clientData?.phone || '')}
                         </p>
                       </div>
                     )}
@@ -1134,26 +1157,15 @@ const Profile = () => {
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Telefone de emergência</Label>
                     {isEditing ? (
-                      <PhoneInputBR
+                      <PhoneInput
                         value={formData.emergency_contact_phone}
                         onChange={(value) => setFormData({...formData, emergency_contact_phone: value})}
-                        placeholder="(11) 99999-9999"
                         className="mt-1"
                       />
                     ) : (
                       <div className="bg-gray-50 rounded-lg p-3 border border-gray-100 mt-1">
                         <p className="text-sm font-medium text-gray-800">
-                          {clientData?.emergency_contact_phone ? 
-                            (() => {
-                              const digits = clientData.emergency_contact_phone.replace(/\D/g, '');
-                              if (digits.length === 11) {
-                                return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-                              } else if (digits.length === 10) {
-                                return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-                              }
-                              return clientData.emergency_contact_phone;
-                            })() : 'Não informado'
-                          }
+                          {formatPhoneDisplay(clientData?.emergency_contact_phone || '')}
                         </p>
                       </div>
                     )}
@@ -1275,6 +1287,141 @@ const Profile = () => {
           {/* Bottom Spacing */}
           <div className="h-16"></div>
         </div>
+
+        {/* Section Completion Dialog */}
+        <Dialog open={!!sectionModal} onOpenChange={(open) => { if (!open) setSectionModal(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {sectionModal === 'Contato de emergência' && <Heart className="w-5 h-5 text-red-500" />}
+                {sectionModal === 'Contato' && <Phone className="w-5 h-5 text-blue-500" />}
+                {sectionModal === 'Informações básicas' && <User className="w-5 h-5 text-blue-500" />}
+                {sectionModal === 'Preferências' && <Sparkles className="w-5 h-5 text-purple-500" />}
+                {sectionModal}
+              </DialogTitle>
+              <DialogDescription>
+                {sectionModal === 'Contato de emergência' && 'Adicione um contato para ser acionado em emergências.'}
+                {sectionModal === 'Contato' && 'Informe seus dados de contato.'}
+                {sectionModal === 'Informações básicas' && 'Confirme suas informações básicas.'}
+                {sectionModal === 'Preferências' && 'Personalize sua experiência.'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              {sectionModal === 'Contato de emergência' && (
+                <>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">Nome do contato</Label>
+                    <Input
+                      value={formData.emergency_contact_name}
+                      onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                      placeholder="Nome completo"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">Telefone de emergência</Label>
+                    <PhoneInput
+                      value={formData.emergency_contact_phone}
+                      onChange={(v) => setFormData({ ...formData, emergency_contact_phone: v })}
+                      className="mt-1"
+                    />
+                  </div>
+                </>
+              )}
+
+              {sectionModal === 'Informações básicas' && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Nome completo</Label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Seu nome"
+                    className="mt-1"
+                  />
+                </div>
+              )}
+
+              {sectionModal === 'Contato' && (
+                <>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">Telefone</Label>
+                    <PhoneInput
+                      value={formData.phone}
+                      onChange={(v) => setFormData({ ...formData, phone: v })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="modal-whatsapp"
+                      checked={formData.is_whatsapp}
+                      onCheckedChange={(v) => setFormData({ ...formData, is_whatsapp: !!v })}
+                    />
+                    <Label htmlFor="modal-whatsapp" className="text-sm text-gray-700 cursor-pointer">Este número é WhatsApp</Label>
+                  </div>
+                  {contactChannels.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Canal de contato preferido</Label>
+                      <Select value={formData.preferred_channel_code} onValueChange={(v) => setFormData({ ...formData, preferred_channel_code: v })}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {contactChannels.map(c => <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {marketingSources.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Como nos conheceu?</Label>
+                      <Select value={formData.marketing_source_code} onValueChange={(v) => setFormData({ ...formData, marketing_source_code: v })}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectContent>
+                          {marketingSources.map(s => <SelectItem key={s.code} value={s.code}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {sectionModal === 'Preferências' && (
+                <>
+                  {staffProfiles.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Profissional preferido</Label>
+                      <Select value={formData.preferred_staff_profile_id} onValueChange={(v) => setFormData({ ...formData, preferred_staff_profile_id: v })}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Sem preferência" /></SelectTrigger>
+                        <SelectContent>
+                          {staffProfiles.map(s => <SelectItem key={s.id} value={s.id}>{s.name || s.id}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">Necessidades especiais / Acessibilidade</Label>
+                    <Textarea
+                      value={formData.accessibility_notes}
+                      onChange={(e) => setFormData({ ...formData, accessibility_notes: e.target.value })}
+                      placeholder="Descreva qualquer necessidade especial..."
+                      className="mt-1"
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setSectionModal(null)} disabled={isSavingSection}>
+                Cancelar
+              </Button>
+              <Button onClick={saveSectionModal} disabled={isSavingSection} className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
+                {isSavingSection ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</> : 'Salvar'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Micro-Wizard Modal */}
         <ClientMicroWizard

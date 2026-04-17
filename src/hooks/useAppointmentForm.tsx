@@ -113,6 +113,15 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
 
   const { pricing } = usePricing(pricingParams);
 
+  // Secondary pricing — needed so the time-slot availability check uses the
+  // same breed-specific duration the DB will use when reserving slots.
+  const secondaryPricingParams = selectedPet && selectedSecondaryService ? {
+    serviceId: selectedSecondaryService.id,
+    breedId: selectedPet.breed,
+    size: selectedPet.size
+  } : null;
+  const { pricing: secondaryPricing } = usePricing(secondaryPricingParams);
+
   // Check service requirements when service is selected
   useEffect(() => {
     if (selectedService) {
@@ -181,19 +190,47 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
       return;
     }
 
+    // Wait for breed-specific pricing to resolve before fetching slots. Otherwise
+    // the availability preview uses the service's default_duration (e.g. 40 min for
+    // Banho Completo) while the backend reserves using the breed override (e.g. 75
+    // min for Yorkshire medium) — slots then look free in the UI but the DB
+    // rejects the booking with "Not enough primary slots reserved".
+    if (selectedPet && !pricing) {
+      return;
+    }
+    if (selectedPet && selectedSecondaryService && !secondaryPricing) {
+      return;
+    }
+
     if (fetchDebounceRef.current) {
       clearTimeout(fetchDebounceRef.current);
     }
 
     fetchDebounceRef.current = setTimeout(() => {
       const staffIds = serviceRequiresStaff ? getSelectedStaffIds : [];
-      fetchTimeSlots(date, staffIds, setIsLoading, selectedService, selectedSecondaryService || null);
+      fetchTimeSlots(
+        date,
+        staffIds,
+        setIsLoading,
+        selectedService,
+        selectedSecondaryService || null,
+        pricing?.duration ?? null,
+        secondaryPricing?.duration ?? null
+      );
     }, 300); // debounce to avoid flicker and duplicate calls
 
     return () => {
       if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
     };
-  }, [date, staffIdsKey, selectedService, selectedSecondaryService, serviceRequiresStaff, fetchTimeSlots, formStep, getSelectedStaffIds]);
+  }, [date, staffIdsKey, selectedService, selectedSecondaryService, serviceRequiresStaff, fetchTimeSlots, formStep, getSelectedStaffIds, pricing?.duration, secondaryPricing?.duration, selectedPet]);
+
+  // Clear any selected time slot whenever the breed-specific duration changes —
+  // a slot that looked free under the old duration may not be free under the new
+  // one. Forcing the user to re-pick from the refreshed list prevents stale
+  // selections from making it to submit.
+  useEffect(() => {
+    setSelectedTimeSlotId(null);
+  }, [pricing?.duration, secondaryPricing?.duration]);
 
   const handleNextAvailableSelect = useCallback(() => {
     if (nextAvailable) {

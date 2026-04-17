@@ -34,36 +34,22 @@ export function generateClientTimeSlots(isSaturday: boolean = false): string[] {
   return slots;
 }
 
-// Get all 10-minute slots needed for a service duration starting at a given time
-export function getRequiredBackendSlots(startTime: string, durationMinutes: number, isSaturday: boolean = false): string[] {
-  console.log(`🔍 [TIME_SLOT_HELPERS] getRequiredBackendSlots called with startTime: ${startTime}, duration: ${durationMinutes}min, isSaturday: ${isSaturday}`);
-  
+// Get all 10-minute slots needed for a service duration starting at a given time.
+// No endHour cutoff — slots past business hours are intentionally included so that
+// callers (availability matrix checks) can detect overflow and reject the slot.
+export function getRequiredBackendSlots(startTime: string, durationMinutes: number, _isSaturday: boolean = false): string[] {
   const slots: string[] = [];
   const [startHour, startMinute] = startTime.split(':').map(Number);
   const startTotalMinutes = startHour * 60 + startMinute;
-  const endHour: number = isSaturday ? TIME_SLOT_CONFIG.END_HOUR_SATURDAYS : TIME_SLOT_CONFIG.END_HOUR_WEEKDAYS;
-  
-  console.log(`🔍 [TIME_SLOT_HELPERS] Start time breakdown: ${startHour}:${startMinute} = ${startTotalMinutes} total minutes`);
-  console.log(`🔍 [TIME_SLOT_HELPERS] End hour: ${endHour} (${isSaturday ? 'Saturday' : 'Weekday'})`);
-  
-  // Generate all 10-minute slots for the duration
+
   for (let offset = 0; offset < durationMinutes; offset += TIME_SLOT_CONFIG.BACKEND_INTERVAL_MINUTES) {
     const slotTotalMinutes = startTotalMinutes + offset;
     const slotHour = Math.floor(slotTotalMinutes / 60);
     const slotMinute = slotTotalMinutes % 60;
-    
-    // Stop if we go beyond business hours
-    if (slotHour >= endHour) {
-      console.log(`⚠️ [TIME_SLOT_HELPERS] Stopping at ${slotHour}:${slotMinute} - beyond business hours (${endHour}:00)`);
-      break;
-    }
-    
     const timeString = `${slotHour.toString().padStart(2, '0')}:${slotMinute.toString().padStart(2, '0')}:00`;
     slots.push(timeString);
-    console.log(`✅ [TIME_SLOT_HELPERS] Added required slot: ${timeString} (offset: ${offset}min)`);
   }
-  
-  console.log(`📊 [TIME_SLOT_HELPERS] Required backend slots for ${startTime} + ${durationMinutes}min:`, slots);
+
   return slots;
 }
 

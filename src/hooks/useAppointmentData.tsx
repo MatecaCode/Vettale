@@ -187,7 +187,9 @@ export const useAppointmentData = () => {
     staffIds: string[],
     setIsLoading: (loading: boolean) => void,
     selectedService: Service | null,
-    secondaryService: Service | null = null
+    secondaryService: Service | null = null,
+    primaryDurationOverride?: number | null,
+    secondaryDurationOverride?: number | null
   ) => {
     // Prevent unnecessary fetches
     if (!selectedService || !date) {
@@ -205,11 +207,15 @@ export const useAppointmentData = () => {
       } else {
         // Generate default time slots for services that don't require staff
         const isSaturday = date.getDay() === 6; // 6 = Saturday
-        const defaultSlots = generateClientTimeSlots(isSaturday).map(slot => ({
-          id: slot,
-          time: formatTimeSlot(slot),
-          available: true
-        }));
+        const todayKey = format(new Date(), 'yyyy-MM-dd');
+        const isToday = format(date, 'yyyy-MM-dd') === todayKey;
+        const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const defaultSlots = generateClientTimeSlots(isSaturday).map(slot => {
+          const [h, m] = slot.split(':').map(Number);
+          const available = !isToday || h * 60 + m > nowMinutes;
+          return { id: slot, time: formatTimeSlot(slot), available };
+        });
         setTimeSlots(defaultSlots);
         return;
       }
@@ -219,8 +225,11 @@ export const useAppointmentData = () => {
     const uniqueStaffIds = [...new Set(staffIds)];
     
     const dateForQuery = format(date, 'yyyy-MM-dd'); // local date key (parity with admin)
-    const primaryDuration = selectedService.default_duration || 60;
-    const secondaryDuration = secondaryService?.default_duration || 0;
+    // Prefer breed-specific duration override (from PricingService) over service default,
+    // otherwise availability matrix checks diverge from DB slot reservation (which uses
+    // breed-specific values) and bookings fail with "Not enough slots reserved".
+    const primaryDuration = primaryDurationOverride ?? selectedService.default_duration ?? 60;
+    const secondaryDuration = secondaryDurationOverride ?? secondaryService?.default_duration ?? 0;
     const isSaturday = date.getDay() === 6; // 6 = Saturday
 
     setIsLoading(true);
@@ -326,6 +335,19 @@ export const useAppointmentData = () => {
           }
         }
 
+        // Filter out past slots when the selected date is today
+        if (isSlotAvailable) {
+          const isToday = dateForQuery === format(new Date(), 'yyyy-MM-dd');
+          if (isToday) {
+            const [slotHour, slotMinute] = clientSlot.split(':').map(Number);
+            const now = new Date();
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            if (slotHour * 60 + slotMinute <= nowMinutes) {
+              isSlotAvailable = false;
+            }
+          }
+        }
+
         availableSlots.push({
           id: clientSlot,
           time: formatTimeSlot(clientSlot),
@@ -349,23 +371,22 @@ export const useAppointmentData = () => {
   }, []);
 
   // Helper function to get required backend slots
-  const getRequiredBackendSlots = (startTime: string, durationMinutes: number, isSaturday: boolean = false): string[] => {
+  // No endHour cutoff here — slots past business hours are generated so that the
+  // availability matrix check (which only has rows up to 15:50/11:50) will
+  // correctly mark the parent client slot as unavailable.
+  const getRequiredBackendSlots = (startTime: string, durationMinutes: number, _isSaturday: boolean = false): string[] => {
     const slots: string[] = [];
     const [startHour, startMinute] = startTime.split(':').map(Number);
     const startTotalMinutes = startHour * 60 + startMinute;
-    const endHour: number = isSaturday ? 12 : 16; // 12:00 for Saturdays, 16:00 for weekdays
-    
+
     for (let offset = 0; offset < durationMinutes; offset += 10) {
       const slotTotalMinutes = startTotalMinutes + offset;
       const slotHour = Math.floor(slotTotalMinutes / 60);
       const slotMinute = slotTotalMinutes % 60;
-      
-      if (slotHour >= endHour) break;
-      
       const timeString = `${slotHour.toString().padStart(2, '0')}:${slotMinute.toString().padStart(2, '0')}:00`;
       slots.push(timeString);
     }
-    
+
     return slots;
   };
 
