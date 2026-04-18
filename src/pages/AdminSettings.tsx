@@ -244,30 +244,22 @@ const AdminSettings = () => {
     const toastId = `send-setup-${staffProfile.id}`;
     try {
       setResendingSetupFor(staffProfile.id);
-      
-      // Use fetch directly to get better error details
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`https://ieotixprkfglummoobkb.supabase.co/functions/v1/send-staff-invite`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token ?? ''}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: staffProfile.email.trim().toLowerCase(),
-          staff_profile_id: staffProfile.id,
-        }),
-      });
 
-      const responseData = await response.json();
-      
-      if (!response.ok) {
-        console.error("[SEND_STAFF_SETUP] HTTP Error:", {
-          status: response.status,
-          statusText: response.statusText,
-          data: responseData
-        });
-        throw new Error(responseData?.error || `HTTP ${response.status}: ${response.statusText}`);
+      // Use supabase.functions.invoke so the client auto-refreshes the JWT
+      // before the call — raw fetch cannot handle token rotation.
+      const { data: responseData, error: invokeError } = await supabase.functions.invoke(
+        'send-staff-invite',
+        {
+          body: {
+            email: staffProfile.email.trim().toLowerCase(),
+            staff_profile_id: staffProfile.id,
+          },
+        }
+      );
+
+      if (invokeError) {
+        console.error("[SEND_STAFF_SETUP] invoke error:", invokeError);
+        throw new Error(invokeError.message ?? String(invokeError));
       }
 
       if (responseData?.error) {
@@ -369,54 +361,42 @@ const AdminSettings = () => {
       });
 
       // Send invitation email using Edge Function (like client flow)
+      // Use supabase.functions.invoke so the client auto-refreshes the JWT
+      // before the call — raw fetch cannot handle token rotation.
       try {
-        const { data: { session: inviteSession } } = await supabase.auth.getSession();
-        const response = await fetch(`https://ieotixprkfglummoobkb.supabase.co/functions/v1/send-staff-invite`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${inviteSession?.access_token ?? ''}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: staffData.email.trim().toLowerCase(),
-            staff_profile_id: staffData.id,
-          }),
-        });
-
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          console.error("❌ [ADMIN_SETTINGS] Invite HTTP Error:", {
-            status: response.status,
-            statusText: response.statusText,
-            data: responseData
-          });
-          
-          // Handle specific error cases for better user feedback
-          let inviteErrorMessage = 'Erro desconhecido';
-          if (responseData?.error) {
-            if (responseData.error.includes('already registered') || responseData.error.includes('already exists')) {
-              inviteErrorMessage = 'Este email já possui uma conta no sistema';
-            } else if (responseData.error.includes('P0001')) {
-              inviteErrorMessage = 'Este email já está associado a uma conta existente';
-            } else {
-              inviteErrorMessage = responseData.error;
-            }
+        const { data: responseData, error: invokeError } = await supabase.functions.invoke(
+          'send-staff-invite',
+          {
+            body: {
+              email: staffData.email.trim().toLowerCase(),
+              staff_profile_id: staffData.id,
+            },
           }
-          
+        );
+
+        if (invokeError) {
+          console.error("❌ [ADMIN_SETTINGS] Invite invoke error:", invokeError);
+
+          let inviteErrorMessage = invokeError.message ?? 'Erro desconhecido';
+          if (inviteErrorMessage.includes('already registered') || inviteErrorMessage.includes('already exists')) {
+            inviteErrorMessage = 'Este email já possui uma conta no sistema';
+          } else if (inviteErrorMessage.includes('P0001')) {
+            inviteErrorMessage = 'Este email já está associado a uma conta existente';
+          }
+
           toast.success('Staff criado com sucesso!', {
             description: `Falha ao enviar convite: ${inviteErrorMessage}. Use o botão "Enviar Setup" para reenviar.`,
           });
         } else if (responseData?.error) {
           console.error("❌ [ADMIN_SETTINGS] Invite function error:", responseData);
-          
+
           let inviteErrorMessage = responseData.error;
           if (responseData.error.includes('already registered') || responseData.error.includes('already exists')) {
             inviteErrorMessage = 'Este email já possui uma conta no sistema';
           } else if (responseData.error.includes('P0001')) {
             inviteErrorMessage = 'Este email já está associado a uma conta existente';
           }
-          
+
           toast.success('Staff criado com sucesso!', {
             description: `Falha ao enviar convite: ${inviteErrorMessage}. Use o botão "Enviar Setup" para reenviar.`,
           });
