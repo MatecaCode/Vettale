@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,13 @@ type ReviewableItem = {
 
 const Appointments = () => {
   const { user, loading: authLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
+  const autoReview = searchParams.get('review') === '1';
+  const [activeTab, setActiveTab] = useState<string>('upcoming');
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [openDialogId, setOpenDialogId] = useState<string | null>(null);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -363,6 +370,37 @@ const Appointments = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  // Navigate to and optionally open a specific appointment when arriving from a notification.
+  // Key insight: past-tab cards are not in the DOM until the tab is active, so we must
+  // switch the tab FIRST (via state), then wait for React to render, then act on the element.
+  useEffect(() => {
+    if (!highlightId || isLoading || appointments.length === 0) return;
+
+    const target = appointments.find((a) => a.id === highlightId);
+    if (!target) return;
+
+    const isPast =
+      target.status === 'completed' ||
+      target.status === 'cancelled' ||
+      target.service_status === 'completed' ||
+      new Date(target.date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
+
+    // 1. Switch tab state first so the cards render
+    if (isPast) setActiveTab('past');
+
+    // 2. After one animation frame + a small buffer, the cards are in the DOM
+    setTimeout(() => {
+      const el = cardRefs.current.get(highlightId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      setHighlightedId(highlightId);
+      setTimeout(() => setHighlightedId(null), 2500);
+
+      // 3. Auto-open the dialog for review_reminder notifications
+      if (autoReview) setOpenDialogId(highlightId);
+    }, 350);
+  }, [highlightId, autoReview, isLoading, appointments]);
+
   const getStatusBadge = (status: string, serviceStatus?: string) => {
     switch (status) {
       case 'pending':
@@ -424,11 +462,25 @@ const Appointments = () => {
     }
   };
 
-  const AppointmentDetailCard = ({ appointment, index }: { appointment: AppointmentWithDetails; index: number }) => (
-    <Dialog>
+  const AppointmentDetailCard = ({ appointment, index }: { appointment: AppointmentWithDetails; index: number }) => {
+    const isHighlighted = highlightedId === appointment.id;
+    return (
+    <div
+      ref={(el) => {
+        if (el) cardRefs.current.set(appointment.id, el);
+        else cardRefs.current.delete(appointment.id);
+      }}
+    >
+    <Dialog
+      open={openDialogId === appointment.id}
+      onOpenChange={(isOpen) => {
+        if (isOpen) setOpenDialogId(appointment.id);
+        else setOpenDialogId(null);
+      }}
+    >
       <DialogTrigger asChild>
-                 <Card 
-          className={`group hover:shadow-xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm shadow-lg transform hover:scale-105 cursor-pointer h-[460px] w-full ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                 <Card
+          className={`group hover:shadow-xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm shadow-lg transform hover:scale-105 cursor-pointer h-[460px] w-full ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} ${isHighlighted ? 'ring-4 ring-[#2B70B2] ring-offset-2 scale-105' : ''}`}
            style={{ transitionDelay: `${500 + index * 100}ms` }}
          >
                      <CardHeader className="pb-4 h-24">
@@ -606,8 +658,10 @@ const Appointments = () => {
         </div>
       </DialogContent>
     </Dialog>
-  );
-  
+    </div>
+    );
+  };
+
   const today = new Date();
   today.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
 
@@ -701,7 +755,7 @@ const Appointments = () => {
 
           {/* Content Section */}
           <div className={`transition-all duration-1000 delay-400 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-            <Tabs defaultValue="upcoming" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-8 bg-white/80 backdrop-blur-sm shadow-lg border-0">
                 <TabsTrigger value="upcoming" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#2B70B2] data-[state=active]:to-[#6BAEDB] data-[state=active]:text-white">
                   <CalendarDays className="w-4 h-4 mr-2" />

@@ -234,6 +234,8 @@ AS $$
 DECLARE
   v_pet_name     text;
   v_service_name text;
+  v_deep_link    text;
+  v_review_link  text;
 BEGIN
   -- Resolve display names once (best-effort — never fail the UPDATE)
   BEGIN
@@ -243,6 +245,9 @@ BEGIN
     v_pet_name     := 'seu pet';
     v_service_name := 'o serviço';
   END;
+
+  v_deep_link   := '/appointments?highlight=' || NEW.id::text;
+  v_review_link := '/appointments?highlight=' || NEW.id::text || '&review=1';
 
   -- ── booking_approved (pending → confirmed) ────────────────────────────────
   IF OLD.status = 'pending' AND NEW.status IN ('confirmed', 'approved') THEN
@@ -254,7 +259,7 @@ BEGIN
         'Seu agendamento para ' || COALESCE(v_pet_name, 'seu pet') ||
           ' foi confirmado. Até breve!',
         NEW.id,
-        '/appointments',
+        v_deep_link,
         jsonb_build_object(
           'appointment_id', NEW.id,
           'pet_name',       v_pet_name,
@@ -295,7 +300,7 @@ BEGIN
         COALESCE(v_service_name, 'O serviço') || ' do ' ||
           COALESCE(v_pet_name, 'seu pet') || ' está em andamento.',
         NEW.id,
-        '/appointments',
+        v_deep_link,
         jsonb_build_object(
           'appointment_id', NEW.id,
           'pet_name',       v_pet_name,
@@ -321,21 +326,21 @@ BEGIN
           COALESCE(v_pet_name, 'seu pet') ||
           ' foi concluído. Pode vir buscá-lo!',
         NEW.id,
-        '/appointments',
+        v_deep_link,
         jsonb_build_object(
           'appointment_id', NEW.id,
           'pet_name',       v_pet_name,
           'service_name',   v_service_name
         )
       );
-      -- Review reminder notification
+      -- Review reminder notification (uses v_review_link to auto-open the dialog)
       PERFORM public.notify_client(
         NEW.client_id,
         'review_reminder',
         'Avalie o Serviço',
         'Como foi o atendimento? Compartilhe sua experiência e ajude outros clientes.',
         NEW.id,
-        '/appointments',
+        v_review_link,
         jsonb_build_object(
           'appointment_id', NEW.id,
           'pet_name',       v_pet_name,

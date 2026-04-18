@@ -41,18 +41,18 @@ interface NavSection {
 }
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, signOut, isAdmin, loading, rolesLoaded } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>(['appointments', 'staff', 'clients']);
 
-  // Redirect if not admin
+  // Redirect only after roles are fully fetched — prevents false redirect during refresh
   React.useEffect(() => {
-    if (user && !isAdmin) {
+    if (!loading && rolesLoaded && user && !isAdmin) {
       navigate('/');
     }
-  }, [user, isAdmin, navigate]);
+  }, [user, isAdmin, navigate, loading, rolesLoaded]);
 
   const toggleSection = (sectionTitle: string) => {
     setExpandedSections(prev => 

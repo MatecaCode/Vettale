@@ -479,16 +479,7 @@ const Register = () => {
                     </RadioGroup>
                   </div>
 
-                  {/* Unavailable notice when phone verification is selected */}
-                  {authMethod === 'phone' && (
-                    <Alert>
-                      <AlertDescription>
-                        Verificação por telefone ainda não está disponível. Por favor, selecione <strong>E-mail</strong> como método de verificação.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <Button type="submit" className="w-full" disabled={isLoading || authMethod === 'phone'}>
+                  <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'Registrando...' : 'Criar conta'}
                   </Button>
                 </div>

@@ -17,6 +17,7 @@ interface AuthContextType {
   signInWithPhonePassword: (phone: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   loading: boolean;
+  rolesLoaded: boolean;
   isAdmin: boolean;
   isClient: boolean;
   isGroomer: boolean;
@@ -38,6 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rolesLoaded, setRolesLoaded] = useState(false);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -231,7 +233,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               if (!mounted) return;
               try {
                 const roles = await fetchUserRoles(session.user.id);
-                if (mounted) setUserRoles(roles);
+                if (mounted) { setUserRoles(roles); setRolesLoaded(true); }
                 return; // success — stop retrying
               } catch (err) {
                 console.warn(`⚠️ Auth event role fetch attempt ${attempt} failed`, err);
@@ -244,12 +246,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (mounted) {
               console.error('❌ All auth event role fetch attempts failed');
               setUserRoles(['client']);
+              setRolesLoaded(true);
             }
           })();
         } else {
           setSession(null);
           setUser(null);
           setUserRoles([]);
+          setRolesLoaded(true);
           setAuthError(null);
         }
         
@@ -470,6 +474,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signInWithPhonePassword,
         signOut,
         loading,
+        rolesLoaded,
         isAdmin,
         isClient,
         isGroomer,
