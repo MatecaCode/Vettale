@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import ClientNotificationBell from '@/components/ClientNotificationBell';
 import { Menu } from 'lucide-react';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -140,6 +141,11 @@ const Navigation = () => {
                   >
                     Status
                   </Link>
+                )}
+
+                {/* Client notification bell — only for non-admin, non-staff users */}
+                {!hasRole('admin') && !isStaff && !hasRole('groomer') && !hasRole('vet') && (
+                  <ClientNotificationBell />
                 )}
 
                 <DropdownMenu>

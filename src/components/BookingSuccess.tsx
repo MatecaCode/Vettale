@@ -279,16 +279,24 @@ const BookingSuccess: React.FC = () => {
                     </div>
                   ))}
                   
-                  {/* Total Duration */}
-                  <div className="pt-3 border-t border-gray-200">
+                  {/* Total Duration & Price */}
+                  <div className="pt-3 border-t border-gray-200 space-y-1">
                     <div className="flex justify-between font-semibold">
                       <span>Duração Total:</span>
-                      <span>{booking.duration} minutos</span>
+                      <span>
+                        {booking.service_assignments.length > 1
+                          ? booking.service_assignments.reduce((sum, a) => sum + (a.duration || 0), 0)
+                          : booking.duration} minutos
+                      </span>
                     </div>
                     {booking.total_price > 0 && (
                       <div className="flex justify-between font-semibold text-green-600">
                         <span>Valor Total:</span>
-                        <span>R$ {booking.total_price.toFixed(2)}</span>
+                        <span>
+                          R$ {booking.service_assignments.length > 1
+                            ? booking.service_assignments.reduce((sum, a) => sum + (a.price || 0), 0).toFixed(2)
+                            : booking.total_price.toFixed(2)}
+                        </span>
                       </div>
                     )}
                   </div>

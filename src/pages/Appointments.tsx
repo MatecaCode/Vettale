@@ -107,32 +107,42 @@ const Appointments = () => {
             ),
             appointment_services (
               service_order,
+              duration,
+              price,
               services (name)
             )
           `)
           .eq('client_id', clientData.id)
           .order('date', { ascending: true });
-        
+
         if (error) {
           console.error('❌ [APPOINTMENTS] Supabase error:', error);
           throw error;
         }
-        
+
         console.log('📊 [APPOINTMENTS] Raw appointments data:', data);
-        
+
         if (data) {
           const formattedData = data.map((apt) => {
             // Get all staff names from appointment_staff relationship
             const staffNames = apt.appointment_staff?.map((as: any) => as.staff_profiles?.name).filter(Boolean) || [];
 
             // Get all service names from appointment_services
-            const serviceNames = apt.appointment_services?.map((aps: any) => 
+            const serviceNames = apt.appointment_services?.map((aps: any) =>
               (aps.services as any)?.name
             ).filter(Boolean) || [];
-            
+
             // If no appointment_services, fall back to primary service
             const allServiceNames = serviceNames.length > 0 ? serviceNames : [(apt.services as any)?.name || 'Serviço'];
             const serviceName = allServiceNames.join(', ');
+
+            // Compute total duration from per-service records when available (resilient to DB aggregate bugs)
+            const servicesDuration = apt.appointment_services?.reduce((sum: number, s: any) => sum + (s.duration || 0), 0) || 0;
+            const totalDuration = servicesDuration > 0 ? servicesDuration : (apt.duration || 60);
+
+            // Compute total price from per-service records when available
+            const servicesPrice = apt.appointment_services?.reduce((sum: number, s: any) => sum + (s.price || 0), 0) || 0;
+            const totalPrice = servicesPrice > 0 ? servicesPrice : (apt.total_price || 0);
 
             return {
               id: apt.id,
@@ -145,8 +155,8 @@ const Appointments = () => {
               notes: apt.notes || undefined,
               staff_names: staffNames,
               staff_name: staffNames.length > 0 ? staffNames.join(', ') : undefined,
-              duration: apt.duration || 60,
-              total_price: apt.total_price || 0
+              duration: totalDuration,
+              total_price: totalPrice
             };
           });
           
@@ -244,30 +254,38 @@ const Appointments = () => {
           ),
           appointment_services (
             service_order,
+            duration,
+            price,
             services (name)
           )
         `)
         .eq('client_id', clientData.id)
         .order('date', { ascending: true });
-      
+
       if (error) {
         console.error('❌ [APPOINTMENTS] Supabase error:', error);
         throw error;
       }
-      
+
       if (data) {
         const formattedData = data.map((apt) => {
           // Get all staff names from appointment_staff relationship
           const staffNames = apt.appointment_staff?.map((as: any) => as.staff_profiles?.name).filter(Boolean) || [];
 
           // Get all service names from appointment_services
-          const serviceNames = apt.appointment_services?.map((aps: any) => 
+          const serviceNames = apt.appointment_services?.map((aps: any) =>
             (aps.services as any)?.name
           ).filter(Boolean) || [];
-          
+
           // If no appointment_services, fall back to primary service
           const allServiceNames = serviceNames.length > 0 ? serviceNames : [(apt.services as any)?.name || 'Serviço'];
           const serviceName = allServiceNames.join(', ');
+
+          // Compute totals from per-service records (resilient to DB aggregate bugs)
+          const servicesDuration = apt.appointment_services?.reduce((sum: number, s: any) => sum + (s.duration || 0), 0) || 0;
+          const totalDuration = servicesDuration > 0 ? servicesDuration : (apt.duration || 60);
+          const servicesPrice = apt.appointment_services?.reduce((sum: number, s: any) => sum + (s.price || 0), 0) || 0;
+          const totalPrice = servicesPrice > 0 ? servicesPrice : (apt.total_price || 0);
 
           return {
             id: apt.id,
@@ -280,11 +298,11 @@ const Appointments = () => {
             notes: apt.notes || undefined,
             staff_names: staffNames,
             staff_name: staffNames.length > 0 ? staffNames.join(', ') : undefined,
-            duration: apt.duration || 60,
-            total_price: apt.total_price || 0
+            duration: totalDuration,
+            total_price: totalPrice
           };
         });
-      
+
         console.log('✅ [APPOINTMENTS] Refreshed appointments:', formattedData);
         setAppointments(formattedData);
       }

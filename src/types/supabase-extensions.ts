@@ -1,4 +1,18 @@
 
+// ─── Client Notification Types ────────────────────────────────────────────────
+export interface ClientNotification {
+  id: string;
+  client_id: string;
+  appointment_id: string | null;
+  type: 'booking_approved' | 'service_in_progress' | 'service_completed' | 'review_reminder' | string;
+  title: string;
+  body: string;
+  deep_link: string;
+  metadata: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+}
+
 // ─── Admin Notification Types ─────────────────────────────────────────────────
 export interface AdminNotification {
   id: string;

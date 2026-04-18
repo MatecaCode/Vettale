@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, lazy, Suspense, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import Services from "./pages/Services";
@@ -55,6 +55,7 @@ import GroomerAvailability from './pages/GroomerAvailability';
 import Claim from "./pages/Claim";
 import StaffClaim from "./pages/StaffClaim";
 import FloatingWhatsappCTA from "@/components/cta/FloatingWhatsappCTA";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Lazy load heavy components for better performance on low-spec PCs
 const Profile = lazy(() => import("./pages/Profile"));
@@ -62,7 +63,16 @@ const Pets = lazy(() => import("./pages/Pets"));
 const PetFormPage = lazy(() => import('./pages/PetFormPage'));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 // Quick sanity asserts
 console.log("[ENV] URL:", import.meta.env.VITE_SUPABASE_URL);
@@ -110,6 +120,14 @@ if (typeof window !== 'undefined') {
     window.history.replaceState({}, document.title, '/login');
   }
 }
+
+// Wraps a lazy route in its own ErrorBoundary so a render crash in one page
+// doesn't force a full-app reset via the root boundary.
+const LazyRoute = ({ children }: { children: ReactNode }) => (
+  <ErrorBoundary>
+    <Suspense fallback={<LoadingSkeleton />}>{children}</Suspense>
+  </ErrorBoundary>
+);
 
 // Loading skeleton for lazy components
 const LoadingSkeleton = () => (
@@ -199,11 +217,12 @@ function GlobalTokenCatcher() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <BrowserRouter>
-          <AuthProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <BrowserRouter>
+            <AuthProvider>
             <ScrollToTop />
             <ChunkErrorCatcher />
             <GlobalTokenCatcher />
@@ -215,28 +234,12 @@ function App() {
               <Route path="/book" element={<Book />} />
               <Route path="/booking-success" element={<BookingSuccess />} />
               <Route path="/appointments" element={<Appointments />} />
-              <Route path="/pets" element={
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <Pets />
-                </Suspense>
-              } />
-              <Route path="/pets/new" element={
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <PetFormPage />
-                </Suspense>
-              } />
-              <Route path="/pets/edit/:petId" element={
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <PetFormPage />
-                </Suspense>
-              } />
+              <Route path="/pets" element={<LazyRoute><Pets /></LazyRoute>} />
+              <Route path="/pets/new" element={<LazyRoute><PetFormPage /></LazyRoute>} />
+              <Route path="/pets/edit/:petId" element={<LazyRoute><PetFormPage /></LazyRoute>} />
               <Route path="/shop" element={<Shop />} />
               <Route path="/cart" element={<Cart />} />
-              <Route path="/profile" element={
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <Profile />
-                </Suspense>
-              } />
+              <Route path="/profile" element={<LazyRoute><Profile /></LazyRoute>} />
               <Route path="/staff-profile" element={<StaffProfile />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
@@ -257,16 +260,8 @@ function App() {
               <Route path="/staff-calendar" element={<StaffCalendar />} />
               
               {/* Admin Routes - 3-Tiered Structure */}
-              <Route path="/admin" element={
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <AdminDashboard />
-                </Suspense>
-              } />
-              <Route path="/admin/dashboard" element={
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <AdminDashboard />
-                </Suspense>
-              } />
+              <Route path="/admin" element={<LazyRoute><AdminDashboard /></LazyRoute>} />
+              <Route path="/admin/dashboard" element={<LazyRoute><AdminDashboard /></LazyRoute>} />
               <Route path="/admin/actions" element={<AdminActionCenter />} />
               <Route path="/admin/appointments" element={<AdminAppointments />} />
               <Route path="/admin/edit-booking/:appointmentId" element={<AdminEditBooking />} />
@@ -290,20 +285,17 @@ function App() {
               <Route path="/admin/debug/availability/:providerId/:date" element={<AdminDebugAvailability />} />
               
               {/* Legacy Admin Routes (keeping for compatibility) */}
-              <Route path="/admin/booking" element={
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <AdminBookingPage />
-                </Suspense>
-              } />
+              <Route path="/admin/booking" element={<LazyRoute><AdminBookingPage /></LazyRoute>} />
               <Route path="/admin/availability" element={<AdminAvailabilityManager />} />
               <Route path="/status" element={<StatusCenter />} />
               <Route path="/test-data" element={<TestDataPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
