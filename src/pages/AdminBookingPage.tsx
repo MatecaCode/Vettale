@@ -20,10 +20,15 @@ import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { createAdminBooking } from '@/utils/adminBookingUtils';
+import {
+  computePerPetPricing,
+  createAdminMultiPetBooking,
+  type PetPricing,
+} from '@/utils/adminMultiPetBookingUtils';
 import { useNavigate } from 'react-router-dom';
 import BookingReviewModal from '@/components/admin/BookingReviewModal';
 import BookingDiagnostics from '@/components/admin/BookingDiagnostics';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Plus, X, ArrowUp, ArrowDown } from 'lucide-react';
 import browserCompatibility from '@/utils/browserCompatibility';
 import { initializeChromeCompatibility } from '@/utils/chromePolyfills';
 
@@ -37,6 +42,8 @@ interface Pet {
   id: string;
   name: string;
   breed?: string;
+  size?: string | null;
+  is_first_visit?: boolean | null;
 }
 
 interface Service {
@@ -107,6 +114,12 @@ const AdminBookingPage = () => {
   const [reviewBookingData, setReviewBookingData] = useState<any>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+
+  // Multi-pet booking: pets beyond the primary `selectedPet`, in display order.
+  // Empty array = single-pet flow (unchanged behavior).
+  const [additionalPetIds, setAdditionalPetIds] = useState<string[]>([]);
+  const [petPricings, setPetPricings] = useState<PetPricing[]>([]);
+  const [isComputingPricings, setIsComputingPricings] = useState(false);
 
   // Global error handler for unhandled errors
   useEffect(() => {
@@ -198,7 +211,7 @@ const AdminBookingPage = () => {
         console.log('🔍 [ADMIN_BOOKING] Loading pets for client:', selectedClient);
         const { data: petsData, error: petsError } = await supabase
           .from('pets')
-          .select('id, name, breed')
+          .select('id, name, breed, size, is_first_visit')
           .eq('client_id', selectedClient)
           .eq('active', true)
           .order('name');
@@ -219,6 +232,50 @@ const AdminBookingPage = () => {
 
     loadPets();
   }, [selectedClient]);
+
+  // Reset multi-pet additions whenever client or primary pet changes so
+  // we never carry over pets from a previous client.
+  useEffect(() => {
+    setAdditionalPetIds([]);
+  }, [selectedClient, selectedPet]);
+
+  // Derived: ordered list of all pets in this booking (primary first, then extras).
+  const orderedPetIds = selectedPet ? [selectedPet, ...additionalPetIds] : [];
+  const isMultiPet = orderedPetIds.length >= 2;
+
+  // Recompute per-pet duration/price whenever the pet list or services change.
+  useEffect(() => {
+    if (!selectedPrimaryService || orderedPetIds.length === 0) {
+      setPetPricings([]);
+      return;
+    }
+
+    const orderedPets = orderedPetIds
+      .map((id) => pets.find((p) => p.id === id))
+      .filter((p): p is Pet => !!p);
+
+    if (orderedPets.length !== orderedPetIds.length) {
+      // Pets list hasn't caught up yet; wait for next tick.
+      return;
+    }
+
+    let cancelled = false;
+    setIsComputingPricings(true);
+    computePerPetPricing(orderedPets, selectedPrimaryService, selectedSecondaryService || null)
+      .then((result) => {
+        if (!cancelled) setPetPricings(result);
+      })
+      .catch((err) => {
+        console.error('🔍 [ADMIN_BOOKING] Error computing per-pet pricing:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsComputingPricings(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderedPetIds.join(','), selectedPrimaryService, selectedSecondaryService, pets]);
 
   // Clear search when combobox closes
   useEffect(() => {
@@ -709,13 +766,26 @@ const AdminBookingPage = () => {
         staffName = staffMember.name;
       }
       
+      // For multi-pet, totals come from petPricings (per-breed calculations).
+      // For single-pet, keep the existing service-default-based totals.
+      const multiPetTotalDuration = petPricings.reduce((s, p) => s + p.duration, 0);
+      const multiPetKnownTotal = petPricings
+        .filter((p) => !p.isFirstVisit)
+        .reduce((s, p) => s + p.price, 0);
+      const anyFirstVisit = petPricings.some((p) => p.isFirstVisit);
+
       const bookingData = {
         clientName: client.name,
-        petName: petName,
+        petName: isMultiPet
+          ? `${petPricings.length} pets: ${orderedPetIds
+              .map((id) => pets.find((p) => p.id === id)?.name)
+              .filter(Boolean)
+              .join(', ')}`
+          : petName,
         primaryServiceName: primaryService.name,
         secondaryServiceName: secondaryServiceName,
-        totalPrice: totalPrice,
-        totalDuration: totalDuration,
+        totalPrice: isMultiPet ? multiPetKnownTotal : totalPrice,
+        totalDuration: isMultiPet ? multiPetTotalDuration : totalDuration,
         date: selectedDate,
         time: selectedTimeSlot,
         staffName: staffName,
@@ -724,7 +794,12 @@ const AdminBookingPage = () => {
         petId: selectedPet,
         primaryServiceId: selectedPrimaryService,
         secondaryServiceId: selectedSecondaryService || null,
-        providerIds: providerIds
+        providerIds: providerIds,
+        // Multi-pet-specific fields (ignored by single-pet path):
+        isMultiPet,
+        orderedPetIds: isMultiPet ? orderedPetIds : undefined,
+        petPricings: isMultiPet ? petPricings : undefined,
+        hasFirstVisitPet: isMultiPet && anyFirstVisit,
       };
 
       setReviewBookingData(bookingData);
@@ -966,6 +1041,107 @@ const AdminBookingPage = () => {
                   <p className="text-xs text-gray-500">
                     Pets carregados: {pets.length} | Pet selecionado: {selectedPet || 'Nenhum'}
                   </p>
+
+                  {/* Multi-pet: only offered when the client has 2+ pets and one is selected. */}
+                  {selectedPet && pets.length >= 2 && (
+                    <div className="mt-3 p-3 border border-dashed rounded-md bg-blue-50/40">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-sm font-medium">
+                          Adicionar outros pets ao mesmo agendamento
+                        </Label>
+                        <span className="text-xs text-gray-500">
+                          {additionalPetIds.length > 0
+                            ? `${additionalPetIds.length + 1} pets selecionados`
+                            : 'Opcional'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-2">
+                        Mesmo profissional e mesmo serviço para todos. Cada pet terá sua duração calculada pela raça/porte.
+                      </p>
+                      <div className="space-y-1">
+                        {pets
+                          .filter((p) => p.id !== selectedPet)
+                          .map((pet) => {
+                            const order = additionalPetIds.indexOf(pet.id);
+                            const isAdded = order !== -1;
+                            return (
+                              <div
+                                key={pet.id}
+                                className="flex items-center justify-between gap-2 text-sm p-2 rounded bg-white border"
+                              >
+                                <div className="flex-1">
+                                  <span className="font-medium">{pet.name}</span>
+                                  {pet.breed && <span className="text-gray-500"> ({pet.breed}{pet.size ? `, ${pet.size}` : ''})</span>}
+                                  {pet.is_first_visit && (
+                                    <span className="ml-2 text-xs text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                                      Primeira visita
+                                    </span>
+                                  )}
+                                </div>
+                                {isAdded ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-500">#{order + 2}</span>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      disabled={order === 0}
+                                      onClick={() => {
+                                        const next = [...additionalPetIds];
+                                        [next[order - 1], next[order]] = [next[order], next[order - 1]];
+                                        setAdditionalPetIds(next);
+                                      }}
+                                      aria-label="Mover para cima"
+                                    >
+                                      <ArrowUp className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      disabled={order === additionalPetIds.length - 1}
+                                      onClick={() => {
+                                        const next = [...additionalPetIds];
+                                        [next[order + 1], next[order]] = [next[order], next[order + 1]];
+                                        setAdditionalPetIds(next);
+                                      }}
+                                      aria-label="Mover para baixo"
+                                    >
+                                      <ArrowDown className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-red-600"
+                                      onClick={() =>
+                                        setAdditionalPetIds(additionalPetIds.filter((id) => id !== pet.id))
+                                      }
+                                      aria-label="Remover"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7"
+                                    onClick={() => setAdditionalPetIds([...additionalPetIds, pet.id])}
+                                  >
+                                    <Plus className="h-3.5 w-3.5 mr-1" />
+                                    Adicionar
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -1046,27 +1222,91 @@ const AdminBookingPage = () => {
                 {/* Service Summary */}
                 {(primaryService || secondaryService) && (
                   <div className="md:col-span-2 p-4 bg-gray-50 rounded-lg">
-                    <h3 className="font-medium text-gray-900 mb-2">Resumo dos Serviços</h3>
-                    <div className="space-y-1 text-sm">
-                      {primaryService && (
-                        <div className="flex justify-between">
-                          <span>{primaryService.name}</span>
-                          <span>R$ {primaryService.base_price} ({primaryService.default_duration} min)</span>
-                        </div>
-                      )}
-                      {secondaryService && (
-                        <div className="flex justify-between">
-                          <span>{secondaryService.name}</span>
-                          <span>R$ {secondaryService.base_price} ({secondaryService.default_duration} min)</span>
-                        </div>
-                      )}
-                      <div className="border-t pt-1 mt-2">
-                        <div className="flex justify-between font-medium">
-                          <span>Total</span>
-                          <span>R$ {totalPrice} ({totalDuration} min)</span>
+                    <h3 className="font-medium text-gray-900 mb-2">
+                      {isMultiPet ? 'Resumo — Agendamento Múltiplo' : 'Resumo dos Serviços'}
+                    </h3>
+                    {!isMultiPet && (
+                      <div className="space-y-1 text-sm">
+                        {primaryService && (
+                          <div className="flex justify-between">
+                            <span>{primaryService.name}</span>
+                            <span>R$ {primaryService.base_price} ({primaryService.default_duration} min)</span>
+                          </div>
+                        )}
+                        {secondaryService && (
+                          <div className="flex justify-between">
+                            <span>{secondaryService.name}</span>
+                            <span>R$ {secondaryService.base_price} ({secondaryService.default_duration} min)</span>
+                          </div>
+                        )}
+                        <div className="border-t pt-1 mt-2">
+                          <div className="flex justify-between font-medium">
+                            <span>Total</span>
+                            <span>R$ {totalPrice} ({totalDuration} min)</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
+                    {isMultiPet && (
+                      <div className="space-y-1 text-sm">
+                        {isComputingPricings && (
+                          <p className="text-xs text-gray-500">Calculando por pet...</p>
+                        )}
+                        {petPricings.map((pricing, idx) => {
+                          const pet = pets.find((p) => p.id === pricing.petId);
+                          return (
+                            <div key={pricing.petId} className="flex justify-between">
+                              <span>
+                                <span className="text-gray-500 mr-1">#{idx + 1}</span>
+                                {pet?.name}
+                                {pet?.breed && <span className="text-gray-500"> ({pet.breed})</span>}
+                              </span>
+                              <span>
+                                {pricing.isFirstVisit ? (
+                                  <span className="text-amber-700">a avaliar ({pricing.duration} min)</span>
+                                ) : (
+                                  <>R$ {pricing.price.toFixed(2)} ({pricing.duration} min)</>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {(() => {
+                          const totalDur = petPricings.reduce((s, p) => s + p.duration, 0);
+                          const knownTotal = petPricings
+                            .filter((p) => !p.isFirstVisit)
+                            .reduce((s, p) => s + p.price, 0);
+                          const firstVisitCount = petPricings.filter((p) => p.isFirstVisit).length;
+                          // Per proposal: range uses known total as floor, adds service base_price range
+                          // for each unknown pet as a rough upper estimate.
+                          const unknownUpper =
+                            firstVisitCount *
+                            ((primaryService?.base_price || 0) + (secondaryService?.base_price || 0));
+                          return (
+                            <div className="border-t pt-1 mt-2">
+                              <div className="flex justify-between font-medium">
+                                <span>Total ({petPricings.length} pets)</span>
+                                <span>
+                                  {firstVisitCount === 0 ? (
+                                    <>R$ {knownTotal.toFixed(2)} ({totalDur} min)</>
+                                  ) : (
+                                    <>
+                                      R$ {knownTotal.toFixed(2)} + a avaliar{' '}
+                                      {unknownUpper > 0 && (
+                                        <span className="text-xs text-gray-500">
+                                          (~R$ {knownTotal.toFixed(2)}–{(knownTotal + unknownUpper).toFixed(2)})
+                                        </span>
+                                      )}{' '}
+                                      ({totalDur} min)
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
