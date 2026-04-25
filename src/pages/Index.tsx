@@ -116,16 +116,17 @@ useEffect(() => {
                   </Button>
                 </Link>
               </div>
-              <div 
+              <div
                 className={`${animationClasses.slideInRight} ${
                   institutionalAnimation.isVisible ? animationClasses.slideInRightActive : animationClasses.slideInRightInactive
                 }`}
               >
-                <img 
-  src={imageUrl}
-  alt="Tradição e Inovação Vettale - Fundadores da clínica veterinária"
-  className="rounded-lg shadow-lg h-80 w-full object-cover transition-transform duration-500 hover:scale-105"
-/>
+                <img
+                  src="/render-interno.png"
+                  alt="Projeto do novo centro veterinário Vettale - Recepção moderna"
+                  className="rounded-lg shadow-lg h-80 w-full object-cover transition-transform duration-500 hover:scale-105"
+                />
+                <p className="text-xs text-muted-foreground mt-2 text-center italic">* Imagem de projeto 3D — em desenvolvimento</p>
               </div>
             </div>
           </div>

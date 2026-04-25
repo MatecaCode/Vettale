@@ -356,14 +356,14 @@ const About = () => {
           >
             <div className="aspect-[4/3] md:aspect-[3/2] sm:aspect-square rounded-lg shadow-lg overflow-hidden">
               <img
-                src="https://ieotixprkfglummoobkb.supabase.co/storage/v1/object/public/websitecontent//Team.png"
-                alt="Nossa equipe atual - Profissionais dedicados da Vettale"
+                src="/render-externo.png"
+                alt="Projeto da nova área externa Vettale - Espaço de lazer para pets"
                 loading="lazy"
                 decoding="async"
-                className="w-full h-full object-cover object-top transition-transform duration-500 hover:scale-105"
+                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
               />
             </div>
-            <p className="text-sm text-center mt-2 text-muted-foreground">Nossa equipe de profissionais dedicados</p>
+            <p className="text-sm text-center mt-2 text-muted-foreground italic">* Imagem de projeto 3D — em desenvolvimento</p>
           </div>
         </Container>
       </section>
