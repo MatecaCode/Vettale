@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { log } from '@/utils/logger';
 import { User, Session } from '@supabase/supabase-js';
@@ -44,6 +44,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Distinguishes user-initiated logout from refresh-failure SIGNED_OUT events.
+  const intentionalSignOutRef = useRef(false);
+  // Tracks whether we've ever had an authenticated session — so we only show
+  // "session expired" toasts for users who were actually signed in.
+  const hadSessionRef = useRef(false);
 
   // Computed role states based on user_roles table
   const isAdmin = userRoles.includes('admin');
@@ -220,11 +226,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setSession(session);
           setUser(session.user);
           setAuthError(null); // Clear any previous errors
+          hadSessionRef.current = true;
+
+          // TOKEN_REFRESHED fires every ~hour. Roles don't change on refresh,
+          // so just update the session and skip the role re-fetch entirely.
+          if (event === 'TOKEN_REFRESHED') {
+            console.log('🔄 [AUTH] Token refreshed silently for', session.user.email);
+            setLoading(false);
+            return;
+          }
+
           // Ensure client row exists on successful sign-in
           if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
             ensureClientRow(session.user);
           }
-          
+
           // Fetch roles with retry — this is the sole mechanism, so make it resilient.
           // Uses the same maxRetries as the old initializeAuth path but lives here
           // exclusively to avoid the race condition.
@@ -250,11 +266,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
           })();
         } else {
+          // No session. If the user previously had one and didn't click Sign Out,
+          // this SIGNED_OUT was triggered by a failed refresh (expired/revoked
+          // refresh token, network failure, JWT key rotation aftermath, etc.).
+          const wasUnexpected =
+            event === 'SIGNED_OUT' &&
+            hadSessionRef.current &&
+            !intentionalSignOutRef.current;
+
           setSession(null);
           setUser(null);
           setUserRoles([]);
           setRolesLoaded(true);
           setAuthError(null);
+
+          if (wasUnexpected) {
+            console.warn('⚠️ [AUTH] Unexpected sign-out (refresh likely failed). Redirecting to /login');
+            try {
+              toast.error('Sua sessão expirou. Faça login novamente.');
+            } catch {}
+            const onPublicRoute = /^\/(login|register|forgot-password|reset-password|claim|auth\/|$)/.test(
+              window.location.pathname
+            );
+            if (!onPublicRoute) {
+              navigate('/login', { replace: true });
+            }
+          }
+
+          // Reset the intentional flag after handling so future events are evaluated fresh.
+          intentionalSignOutRef.current = false;
+          hadSessionRef.current = false;
         }
         
         // Global redirect gate: if claim_in_progress and currently on /claim, do NOT auto-redirect elsewhere
@@ -407,7 +448,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       console.log('🚪 Starting logout process...');
       setAuthError(null);
-      
+      // Mark this as user-initiated so the SIGNED_OUT auth event handler
+      // does NOT show the "session expired" toast.
+      intentionalSignOutRef.current = true;
+
       // Clear local state immediately to prevent UI issues
       setUser(null);
       setSession(null);
