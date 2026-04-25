@@ -165,6 +165,10 @@ const Register = () => {
     if (password !== confirmPassword) { setError('As senhas não coincidem.'); return; }
     if (password.length < 6) { setError('A senha deve ter pelo menos 6 caracteres.'); return; }
     if (emailError) { setError('Por favor, corrija os erros no email antes de continuar.'); return; }
+    if (accountType === 'cliente') {
+      const cleanPhone = phone.replace(/\D/g, '');
+      if (cleanPhone.length < 7) { setError('Telefone é obrigatório.'); return; }
+    }
     if (requiresCode && !registrationCode) {
       setError(`Código de registro é obrigatório para ${accountType === 'admin' ? 'administradores' : 'funcionários'}.`);
       return;
@@ -437,9 +441,9 @@ const Register = () => {
                       value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
                   </div>
 
-                  {/* Phone — always visible */}
+                  {/* Phone — required */}
                   <div className="grid gap-2">
-                    <Label>Telefone <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+                    <Label>Telefone</Label>
                     <PhoneInput value={phone} onChange={setPhone} />
                   </div>
 

@@ -280,6 +280,13 @@ const Profile = () => {
   useEffect(() => {
     if (!user) return;
     if (hasRunOnboarding(user.id)) return; // never auto-open again after first completion/snooze
+
+    // If profile is now 100%, mark onboarding done and stop
+    if (profileProgress.percent_complete === 100) {
+      setOnboardingDone(user.id);
+      return;
+    }
+
     // Only run after we have server-side progress loaded at least once
     const promptedKey = `profile_completion_prompted:${user.id}`;
     const alreadyPrompted = sessionStorage.getItem(promptedKey) === '1';
@@ -289,7 +296,7 @@ const Profile = () => {
     const onlyEmergencyMissing = missing.length > 0 && missing.every(f => ['emergency_contact_name','emergency_contact_phone'].includes(f));
 
     // If progress < 100 and not just emergency fields, open modal once
-    if (profileProgress.percent_complete > 0 && profileProgress.percent_complete < 100 && !onlyEmergencyMissing) {
+    if (profileProgress.percent_complete > 0 && !onlyEmergencyMissing) {
       sessionStorage.setItem(promptedKey, '1');
       setShowMicroWizard(true);
       setShowNudgeBanner(false);
@@ -491,13 +498,16 @@ const Profile = () => {
 
   const checkFirstVisitSetup = async () => {
     try {
+      // Never auto-open if the user has already completed onboarding
+      if (hasRunOnboarding(user?.id)) return;
+
       const { data, error } = await supabase.rpc('client_needs_first_visit_setup');
-      
+
       if (error) {
         console.error('Error checking first visit setup:', error);
         return;
       }
-      
+
       setNeedsFirstVisitSetup(data || false);
       if (data && !showMicroWizard) {
         // Show micro-wizard after a short delay for better UX
@@ -678,14 +688,37 @@ const Profile = () => {
     console.log('Completing micro-wizard...');
     setShowMicroWizard(false);
     setNeedsFirstVisitSetup(false);
-    
+
     // Refresh data after wizard completion
     await fetchClientData();
-    await loadConsentSnapshot(); // Refresh consent snapshot
-    await loadProfileProgress(); // Refresh progress
+    await loadConsentSnapshot();
+    await loadProfileProgress();
     toast.success('Configuração inicial concluída!');
     // Mark onboarding completed to avoid auto-open in the future
     setOnboardingDone(user?.id);
+
+    // Check if user has any pets — if not, nudge them to add one
+    try {
+      const { data: pets } = await supabase
+        .from('pets')
+        .select('id')
+        .eq('user_id', user?.id)
+        .limit(1);
+      if (!pets || pets.length === 0) {
+        setTimeout(() => {
+          toast('Não esqueça de adicionar o seu amiguinho peludinho!', {
+            description: 'Cadastre seu pet para aproveitar todos os recursos.',
+            action: {
+              label: 'Adicionar pet',
+              onClick: () => navigate('/pets/new'),
+            },
+            duration: 8000,
+          });
+        }, 1000);
+      }
+    } catch {
+      // non-critical
+    }
   };
 
   const handleMicroWizardClose = () => {

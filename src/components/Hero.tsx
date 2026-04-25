@@ -76,11 +76,11 @@ const Hero = () => {
             }`}
           >
             <div className="aspect-[16/9] md:aspect-[4/3] sm:aspect-square rounded-lg shadow-2xl overflow-hidden">
-              <img 
-                src="/lovable-uploads/58d1d3ba-3aac-4831-819e-db278e404d9d.png" 
-                alt="Ambiente acolhedor da Vettale - Clínica moderna com pets felizes e equipe dedicada" 
-                loading="lazy" 
-                decoding="async" 
+              <img
+                src="/render-interno.png"
+                alt="Projeto do novo centro veterinário Vettale - Recepção moderna em desenvolvimento"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent rounded-lg"></div>

@@ -100,11 +100,7 @@ const Testimonials: React.FC = () => {
           </p>
         </div>
 
-        <div
-          className="relative overflow-hidden"
-          onMouseEnter={() => { isPausedRef.current = true; }}
-          onMouseLeave={() => { isPausedRef.current = false; }}
-        >
+        <div className="relative overflow-hidden">
           <div className="relative overflow-hidden" style={{ minHeight: '240px' }}>
             <div ref={trackRef} className="flex gap-8" style={{ willChange: 'transform' }}>
               {duplicatedReviews.map((review, index) => (

@@ -122,11 +122,11 @@ useEffect(() => {
                 }`}
               >
                 <img
-                  src="/render-interno.png"
-                  alt="Projeto do novo centro veterinário Vettale - Recepção moderna"
+                  src="https://ieotixprkfglummoobkb.supabase.co/storage/v1/object/public/websitecontent//Dog%20Minhada%20com%20pessoas.jpg"
+                  alt="Nossa 2ª Cãominhada (1995): um encontro inesquecível que uniu famílias e arrecadou fundos para cães em situação de risco"
                   className="rounded-lg shadow-lg h-80 w-full object-cover transition-transform duration-500 hover:scale-105"
                 />
-                <p className="text-xs text-muted-foreground mt-2 text-center italic">* Imagem de projeto 3D — em desenvolvimento</p>
+                <p className="text-xs text-muted-foreground mt-2 text-center italic">Nossa 2ª Cãominhada (1995): tradição e comunidade desde sempre.</p>
               </div>
             </div>
           </div>
@@ -205,7 +205,35 @@ useEffect(() => {
         </section>
         
         <Testimonials />
-        
+
+        {/* Stats Section */}
+        <section className="py-16" style={{ backgroundColor: '#FFFCF8' }}>
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer relative overflow-hidden">
+                <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">+250.000</div>
+                <h3 className="font-semibold text-lg mb-2">Banhos</h3>
+                <p className="text-sm text-muted-foreground">Pets felizes e cheirosos que passaram por nossas mãos</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer relative overflow-hidden">
+                <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">+16.000</div>
+                <h3 className="font-semibold text-lg mb-2">Consultas</h3>
+                <p className="text-sm text-muted-foreground">Consultas e cuidados especializados para cada pet</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer relative overflow-hidden">
+                <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">+600</div>
+                <h3 className="font-semibold text-lg mb-2">Cirurgias</h3>
+                <p className="text-sm text-muted-foreground">Procedimentos cirúrgicos realizados com excelência</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer relative overflow-hidden">
+                <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">∞</div>
+                <h3 className="font-semibold text-lg mb-2">Sorrisos Incontáveis</h3>
+                <p className="text-sm text-muted-foreground">Momentos de alegria e gratidão que não podem ser medidos</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* CTA Section */}
         <section className="py-20 bg-brand-primary text-brand-primaryFg">
           <div className="max-w-7xl mx-auto px-6 text-center">

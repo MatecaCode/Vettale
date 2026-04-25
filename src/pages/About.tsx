@@ -363,7 +363,7 @@ const About = () => {
                 className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
               />
             </div>
-            <p className="text-sm text-center mt-2 text-muted-foreground italic">* Imagem de projeto 3D — em desenvolvimento</p>
+            <p className="text-sm text-center mt-2 text-muted-foreground italic">* Reforma em andamento — previsão de conclusão: outubro de 2026</p>
           </div>
         </Container>
       </section>

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Dog } from 'lucide-react';
+import { Dog, Instagram } from 'lucide-react';
 
 const Footer: React.FC = () => {
   return (
@@ -40,6 +40,17 @@ const Footer: React.FC = () => {
                 <Link to="/book" className="hover:text-brand-primary transition-colors">
                   Agendar Consulta
                 </Link>
+              </li>
+              <li>
+                <a
+                  href="https://www.instagram.com/vettale.shop/?utm_source=website&utm_medium=footer&utm_campaign=instagram"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-brand-primary transition-colors flex items-center gap-1.5"
+                >
+                  <Instagram className="h-4 w-4" />
+                  Instagram
+                </a>
               </li>
             </ul>
           </div>
