@@ -5,6 +5,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { translateEmailError } from '@/utils/errorMessages';
+import { useSessionTimeout, clearSessionTimers } from '@/hooks/useSessionTimeout';
 
 interface AuthContextType {
   user: User | null;
@@ -50,6 +51,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Tracks whether we've ever had an authenticated session — so we only show
   // "session expired" toasts for users who were actually signed in.
   const hadSessionRef = useRef(false);
+
+  // Client-side enforcement of inactivity / max-session limits.
+  // Runs only when we have an authenticated user. Limits scale by role.
+  useSessionTimeout({
+    enabled: !!user,
+    isAdmin,
+    onTimeout: async (reason) => {
+      try {
+        toast.error(
+          reason === 'inactivity'
+            ? 'Sessão encerrada por inatividade. Faça login novamente.'
+            : 'Sua sessão atingiu o limite máximo. Faça login novamente.'
+        );
+      } catch {}
+      try {
+        intentionalSignOutRef.current = true;
+        clearSessionTimers();
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn('Session timeout sign-out failed:', err);
+      }
+      setUser(null);
+      setSession(null);
+      setUserRoles([]);
+      navigate('/login', { replace: true });
+    },
+  });
 
   // Computed role states based on user_roles table
   const isAdmin = userRoles.includes('admin');
@@ -239,6 +267,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // Ensure client row exists on successful sign-in
           if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
             ensureClientRow(session.user);
+          }
+
+          // On a fresh sign-in, reset the session-start clock so max-session
+          // length is measured from this login (not from a stale prior session).
+          if (event === 'SIGNED_IN') {
+            try {
+              localStorage.setItem('vettale_session_start', String(Date.now()));
+              localStorage.setItem('vettale_last_activity', String(Date.now()));
+            } catch {}
           }
 
           // Fetch roles with retry — this is the sole mechanism, so make it resilient.
@@ -451,6 +488,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Mark this as user-initiated so the SIGNED_OUT auth event handler
       // does NOT show the "session expired" toast.
       intentionalSignOutRef.current = true;
+      clearSessionTimers();
 
       // Clear local state immediately to prevent UI issues
       setUser(null);
