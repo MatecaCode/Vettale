@@ -52,8 +52,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // "session expired" toasts for users who were actually signed in.
   const hadSessionRef = useRef(false);
 
+  // Computed role states based on user_roles table
+  const isAdmin = userRoles.includes('admin');
+  const isClient = userRoles.includes('client');
+  const isGroomer = userRoles.includes('groomer');
+  const isVet = userRoles.includes('vet');
+  const isStaff = userRoles.includes('staff');
+
   // Client-side enforcement of inactivity / max-session limits.
-  // Runs only when we have an authenticated user. Limits scale by role.
+  // Must be declared AFTER `isAdmin` so we don't hit a temporal-dead-zone
+  // ReferenceError in production builds (minifiers don't hoist `const`).
   useSessionTimeout({
     enabled: !!user,
     isAdmin,
@@ -78,13 +86,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       navigate('/login', { replace: true });
     },
   });
-
-  // Computed role states based on user_roles table
-  const isAdmin = userRoles.includes('admin');
-  const isClient = userRoles.includes('client');
-  const isGroomer = userRoles.includes('groomer');
-  const isVet = userRoles.includes('vet');
-  const isStaff = userRoles.includes('staff');
   
   // Primary role priority: admin > staff > groomer > vet > client
   const userRole = isAdmin ? 'admin' : 
