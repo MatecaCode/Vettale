@@ -141,22 +141,22 @@ const StaffCardSelector: React.FC<StaffCardSelectorProps> = ({
               onMouseEnter={() => setHoveredStaff(member.id)}
               onMouseLeave={() => setHoveredStaff(null)}
             >
-              <CardContent className="p-6">
-                <div className="space-y-4">
+              <CardContent className="p-4 md:p-6">
+                <div className="space-y-3 md:space-y-4">
                   {/* Header with avatar and name */}
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-3 md:space-x-4">
                     <div className="relative">
-                      <Avatar className={`h-20 w-20 border-3 transition-all duration-300 ${
+                      <Avatar className={`h-14 w-14 md:h-20 md:w-20 border-3 transition-all duration-300 ${
                         isSelected ? 'border-primary shadow-lg' : 'border-border group-hover:border-primary/50'
                       }`}>
-                        <AvatarImage 
-                          src={member.profile_image || undefined} 
+                        <AvatarImage
+                          src={member.profile_image || undefined}
                           alt={member.name}
                           className="object-cover"
                         />
-                        <AvatarFallback className={`text-lg font-bold transition-colors duration-300 ${
-                          isSelected 
-                            ? 'bg-primary text-primary-foreground' 
+                        <AvatarFallback className={`text-sm md:text-lg font-bold transition-colors duration-300 ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground'
                             : 'bg-gradient-to-br from-primary/10 to-primary/20 text-primary group-hover:from-primary/20 group-hover:to-primary/30'
                         }`}>
                           {member.name.substring(0, 2).toUpperCase()}
@@ -170,7 +170,7 @@ const StaffCardSelector: React.FC<StaffCardSelectorProps> = ({
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <h3 className={`font-bold text-xl transition-colors duration-300 ${
+                      <h3 className={`font-bold text-base md:text-xl transition-colors duration-300 ${
                         isSelected ? 'text-primary' : 'text-foreground group-hover:text-primary'
                       }`}>
                         {member.name}

@@ -29,7 +29,7 @@ const Book = () => {
           <div className="absolute top-40 left-40 w-60 h-60 bg-pink-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse" style={{ animationDelay: '4s' }}></div>
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-6 text-center">
+        <div className="relative max-w-7xl mx-auto px-4 md:px-6 text-center">
           <div className={`transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Agende um <span className="text-primary">Serviço</span>
@@ -43,7 +43,7 @@ const Book = () => {
 
       {/* Booking Section */}
       <section className="pt-0 pb-12 md:py-12 relative bg-white">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-7xl mx-auto px-3 md:px-6">
           {/* Beta notice */}
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
             <p className="font-semibold text-amber-800 mb-1">⚠️ Sistema de Agendamento em Beta</p>
@@ -56,7 +56,7 @@ const Book = () => {
 
           <div className={`${currentStep === 1 ? 'grid grid-cols-1 lg:grid-cols-2' : 'grid grid-cols-1'} gap-8`}>
             {/* Left: Booking form */}
-            <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 border border-gray-100">
+            <div className="bg-white rounded-2xl shadow-2xl p-4 md:p-8 border border-gray-100">
               <AppointmentForm serviceType="grooming" onStepChange={(s) => setCurrentStep(s)} />
             </div>
 
