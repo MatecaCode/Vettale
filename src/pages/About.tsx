@@ -500,6 +500,34 @@ const About = () => {
             </div>
           </div>
 
+          {/* Stats — repeated before closing video */}
+          <div
+            className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 ${animationClasses.slideUp} ${
+              legacyAnimation.isVisible ? animationClasses.slideUpActive : animationClasses.slideUpInactive
+            }`}
+          >
+            <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer">
+              <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">+250.000</div>
+              <h3 className="font-semibold text-lg mb-2">Banhos</h3>
+              <p className="text-sm text-muted-foreground">Pets felizes e cheirosos que passaram por nossas mãos</p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer">
+              <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">+16.000</div>
+              <h3 className="font-semibold text-lg mb-2">Consultas</h3>
+              <p className="text-sm text-muted-foreground">Consultas e cuidados especializados para cada pet</p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer">
+              <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">+600</div>
+              <h3 className="font-semibold text-lg mb-2">Cirurgias</h3>
+              <p className="text-sm text-muted-foreground">Procedimentos cirúrgicos realizados com excelência</p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer">
+              <div className="text-3xl font-bold text-primary mb-2 group-hover:scale-110 transition-transform duration-300">∞</div>
+              <h3 className="font-semibold text-lg mb-2">Sorrisos Incontáveis</h3>
+              <p className="text-sm text-muted-foreground">Momentos de alegria e gratidão que não podem ser medidos</p>
+            </div>
+          </div>
+
           {/* Closing video — Legado e Futuro */}
           <div
             ref={closingVideoAnimation.ref}

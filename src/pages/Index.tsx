@@ -207,7 +207,7 @@ useEffect(() => {
         <Testimonials />
 
         {/* Stats Section */}
-        <section className="py-16" style={{ backgroundColor: '#FFFCF8' }}>
+        <section className="py-16" style={{ backgroundColor: '#F5EEE5' }}>
           <div className="max-w-7xl mx-auto px-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-white p-6 rounded-lg shadow text-center group hover:shadow-xl hover:-translate-y-2 transition-all duration-500 cursor-pointer relative overflow-hidden">
