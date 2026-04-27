@@ -79,26 +79,36 @@ console.log("[ENV] URL:", import.meta.env.VITE_SUPABASE_URL);
 console.log("[ENV] Anon present:", !!import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 // Catch chunk-load failures (e.g., stale cache referencing a deleted hashed file)
+const CHUNK_RELOAD_GUARD = 'vettale_chunk_reload_attempt';
+
 function ChunkErrorCatcher() {
   useEffect(() => {
     const isChunkError = (reason: any) => {
       const msg = String(reason?.message || reason || '');
-      return /Failed to fetch dynamically imported module|Importing a module script failed|module script: Expected a JavaScript module script but the server responded with a MIME type of "text\/html"/i.test(msg);
+      return /Failed to fetch dynamically imported module|Importing a module script failed|module script: Expected a JavaScript module script but the server responded with a MIME type of "text\/html"|Unexpected token ['']?export['"]?|Cannot use import statement/i.test(msg);
+    };
+
+    // Guard: only reload once per session to prevent infinite loops when
+    // the error is not actually caused by a stale chunk (e.g. a build bug).
+    const tryReload = () => {
+      try {
+        if (!sessionStorage.getItem(CHUNK_RELOAD_GUARD)) {
+          sessionStorage.setItem(CHUNK_RELOAD_GUARD, String(Date.now()));
+          window.location.reload();
+        }
+      } catch {}
     };
 
     const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
       if (isChunkError(ev?.reason)) {
         try { ev.preventDefault?.(); } catch {}
-        console.warn('[CHUNK_RECOVERY] Detected chunk load failure. Reloading to refresh asset map.');
-        // Hard refresh to fetch the latest index and chunk map
-        window.location.reload();
+        tryReload();
       }
     };
 
     const onWindowError = (ev: ErrorEvent) => {
       if (isChunkError(ev?.error)) {
-        console.warn('[CHUNK_RECOVERY] Detected chunk load failure via window error. Reloading.');
-        window.location.reload();
+        tryReload();
       }
     };
 

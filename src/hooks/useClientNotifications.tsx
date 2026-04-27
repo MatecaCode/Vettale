@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { ClientNotification } from '@/types/supabase-extensions';
@@ -14,7 +14,9 @@ interface UseClientNotificationsReturn {
 
 const RECENT_LIMIT = 50;
 
-export function useClientNotifications(): UseClientNotificationsReturn {
+const ClientNotificationsContext = createContext<UseClientNotificationsReturn | null>(null);
+
+export function ClientNotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<ClientNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -51,9 +53,6 @@ export function useClientNotifications(): UseClientNotificationsReturn {
     fetchAllRef.current();
   }, [user?.id]);
 
-  // Real-time: refresh when a new client_notification row is inserted for this client.
-  // Depend on user.id (stable primitive) — not the user object — to avoid resubscribing
-  // on every auth-context re-render, which would leak Supabase channels over time.
   useEffect(() => {
     if (!user?.id) return;
 
@@ -112,12 +111,17 @@ export function useClientNotifications(): UseClientNotificationsReturn {
     }
   }, []);
 
-  return {
-    notifications,
-    unreadCount,
-    isLoading,
-    markRead,
-    markAllRead,
-    refresh: fetchAll,
-  };
+  return (
+    <ClientNotificationsContext.Provider
+      value={{ notifications, unreadCount, isLoading, markRead, markAllRead, refresh: fetchAll }}
+    >
+      {children}
+    </ClientNotificationsContext.Provider>
+  );
+}
+
+export function useClientNotifications(): UseClientNotificationsReturn {
+  const ctx = useContext(ClientNotificationsContext);
+  if (!ctx) throw new Error('useClientNotifications must be used within ClientNotificationsProvider');
+  return ctx;
 }

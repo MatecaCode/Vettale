@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ClientNotificationBell from '@/components/ClientNotificationBell';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { ClientNotificationsProvider } from '@/hooks/useClientNotifications';
 import { Menu } from 'lucide-react';
 import { log } from '@/utils/logger';
 
@@ -64,6 +65,7 @@ const Navigation = () => {
   const navItems = getNavItems();
 
   return (
+    <ClientNotificationsProvider>
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
@@ -437,6 +439,7 @@ const Navigation = () => {
         )}
       </div>
     </nav>
+    </ClientNotificationsProvider>
   );
 };
 
