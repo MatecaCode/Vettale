@@ -2,7 +2,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ClientNotificationBell from '@/components/ClientNotificationBell';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { Menu } from 'lucide-react';
+import { log } from '@/utils/logger';
 
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -144,8 +146,10 @@ const Navigation = () => {
                 )}
 
                 {/* Client notification bell — only for non-admin, non-staff users */}
-                {!hasRole('admin') && !isStaff && !hasRole('groomer') && !hasRole('vet') && (
-                  <ClientNotificationBell />
+                {user && !hasRole('admin') && !isStaff && !hasRole('groomer') && !hasRole('vet') && (
+                  <ErrorBoundary fallback={null}>
+                    <ClientNotificationBell />
+                  </ErrorBoundary>
                 )}
 
                 <DropdownMenu>
@@ -254,7 +258,9 @@ const Navigation = () => {
           {/* Mobile right side - notification bell + menu button */}
           <div className="md:hidden flex items-center gap-1">
             {user && !hasRole('admin') && !isStaff && !hasRole('groomer') && !hasRole('vet') && (
-              <ClientNotificationBell />
+              <ErrorBoundary fallback={null}>
+                <ClientNotificationBell />
+              </ErrorBoundary>
             )}
             <Button
               variant="ghost"
