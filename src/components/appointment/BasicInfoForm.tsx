@@ -69,17 +69,17 @@ const ServiceCard: React.FC<{
         'relative w-full text-left rounded-xl border-2 transition-all duration-200',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1',
         'hover:shadow-md hover:-translate-y-0.5 active:scale-95',
-        compact ? 'px-3 py-2' : 'px-4 py-3',
+        compact ? 'px-3 py-2' : 'px-3 py-3 md:px-4',
         selected
           ? `${meta.selectedBg} ${meta.border} shadow-sm`
           : `${meta.bg} border-transparent hover:border-gray-200`,
       ].join(' ')}
     >
-      <span className={`flex items-center gap-2 ${compact ? 'text-sm' : 'text-base'}`}>
-        <span className={compact ? 'text-lg' : 'text-2xl'} aria-hidden>
+      <span className={`flex items-center gap-2 ${compact ? 'text-sm' : 'text-sm md:text-base'}`}>
+        <span className={compact ? 'text-lg' : 'text-xl md:text-2xl'} aria-hidden>
           {meta.emoji}
         </span>
-        <span className={`font-medium ${selected ? 'text-gray-900' : 'text-gray-700'}`}>
+        <span className={`font-medium leading-tight ${selected ? 'text-gray-900' : 'text-gray-700'}`}>
           {service.name}
         </span>
       </span>

@@ -240,12 +240,14 @@ const BookingSuccess: React.FC = () => {
           {/* Booking Details Card */}
           <Card className="animate-fade-in shadow-lg">
             <CardHeader className="pb-4">
-              <div className="flex justify-between items-start">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                 <CardTitle className="flex items-center gap-2">
                   <PawPrint className="w-5 h-5 text-primary" />
                   {booking.pet_name}
                 </CardTitle>
-                {statusInfo.badge}
+                {statusInfo.badge && (
+                  <div className="self-start">{statusInfo.badge}</div>
+                )}
               </div>
             </CardHeader>
             
@@ -341,27 +343,27 @@ const BookingSuccess: React.FC = () => {
 
               {/* Status Info */}
               {booking.status === 'pending' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-amber-800 mb-2">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-green-800 mb-2">
                     O que acontece agora?
                   </h3>
-                  <p className="text-amber-700 text-sm">
-                    Seu agendamento foi enviado para aprovação. A clínica irá revisar 
-                    e confirmar sua solicitação em breve. Você receberá uma notificação 
+                  <p className="text-green-700 text-sm">
+                    Seu agendamento foi enviado para aprovação. A clínica irá revisar
+                    e confirmar sua solicitação em breve. Você receberá uma notificação
                     quando o status for atualizado.
                   </p>
                 </div>
               )}
 
               {/* Action Buttons */}
-              <div className="flex gap-3 pt-4">
-                <Button asChild variant="outline" className="flex-1">
+              <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                <Button asChild variant="outline" className="w-full sm:flex-1">
                   <Link to="/book">
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Novo Agendamento
                   </Link>
                 </Button>
-                <Button asChild className="flex-1">
+                <Button asChild className="w-full sm:flex-1">
                   <Link to="/appointments">
                     Ver Todos os Agendamentos
                   </Link>
