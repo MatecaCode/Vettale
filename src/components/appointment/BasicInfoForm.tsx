@@ -178,30 +178,30 @@ const BasicInfoForm: React.FC<BasicInfoFormProps> = ({
   if (userPets.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>1. Informações Básicas</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg sm:text-xl">1. Informações Básicas</CardTitle>
           <CardDescription>Selecione seu pet e o serviço desejado</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <Alert className="border-orange-200 bg-orange-50">
-            <AlertCircle className="h-4 w-4 text-orange-600" />
-            <AlertDescription className="text-orange-800">
-              <div className="space-y-4">
+        <CardContent className="p-4 sm:p-6 pt-0">
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-orange-800">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0 space-y-3">
                 <div>
-                  <p className="font-medium mb-2">Você ainda não tem pets cadastrados!</p>
-                  <p className="text-sm">
-                    Para agendar um serviço, você precisa primeiro cadastrar pelo menos um pet no seu perfil.
+                  <p className="font-medium text-sm sm:text-base">Você ainda não tem pets cadastrados!</p>
+                  <p className="text-xs sm:text-sm mt-1 leading-relaxed">
+                    Para agendar um serviço, cadastre pelo menos um pet no seu perfil.
                   </p>
                 </div>
-                <Button asChild className="bg-orange-600 hover:bg-orange-700 text-white">
-                  <Link to="/pets" className="flex items-center gap-2">
+                <Button asChild size="sm" className="bg-orange-600 hover:bg-orange-700 text-white w-full sm:w-auto">
+                  <Link to="/pets" className="flex items-center justify-center gap-2">
                     <PlusCircle className="h-4 w-4" />
                     Cadastrar Meu Primeiro Pet
                   </Link>
                 </Button>
               </div>
-            </AlertDescription>
-          </Alert>
+            </div>
+          </div>
         </CardContent>
       </Card>
     );

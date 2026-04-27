@@ -350,11 +350,11 @@ const About = () => {
 
           <div
             ref={teamImageAnimation.ref}
-            className={`mt-12 ${animationClasses.slideUp} ${
+            className={`mt-12 max-w-3xl mx-auto ${animationClasses.slideUp} ${
               teamImageAnimation.isVisible ? animationClasses.slideUpActive : animationClasses.slideUpInactive
             }`}
           >
-            <div className="aspect-[4/3] md:aspect-[3/2] sm:aspect-square rounded-lg shadow-lg overflow-hidden">
+            <div className="aspect-[4/3] sm:aspect-[3/2] rounded-lg shadow-lg overflow-hidden">
               <img
                 src="/render-externo.png"
                 alt="Projeto da nova área externa Vettale - Espaço de lazer para pets"

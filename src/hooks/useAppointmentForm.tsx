@@ -387,7 +387,7 @@ export const useAppointmentForm = (serviceType: 'grooming' | 'veterinary') => {
       toast.success('Agendamento criado com sucesso! Aguardando aprovação da clínica.', {
         duration: 4000,
         style: {
-          background: '#F59E0B',
+          background: '#10B981',
           color: 'white',
           border: 'none'
         }

@@ -251,8 +251,11 @@ const Navigation = () => {
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden">
+          {/* Mobile right side - notification bell + menu button */}
+          <div className="md:hidden flex items-center gap-1">
+            {user && !hasRole('admin') && !isStaff && !hasRole('groomer') && !hasRole('vet') && (
+              <ClientNotificationBell />
+            )}
             <Button
               variant="ghost"
               size="sm"

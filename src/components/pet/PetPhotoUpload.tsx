@@ -3,6 +3,7 @@ import { Camera, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import PetPhotoCropper from './PetPhotoCropper';
 
 interface PetPhotoUploadProps {
   userId: string;
@@ -25,36 +26,23 @@ export function PetPhotoUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(currentPhotoUrl ?? null);
   const [isUploading, setIsUploading] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
 
-  const handleFile = async (file: File) => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error('Formato não suportado. Use JPG, PNG, WEBP ou GIF.');
-      return;
-    }
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      toast.error(`A foto deve ter no máximo ${MAX_SIZE_MB}MB.`);
-      return;
-    }
-
-    // Show local preview immediately
-    const localUrl = URL.createObjectURL(file);
-    setPreview(localUrl);
+  const uploadBlob = async (blob: Blob, ext: string) => {
     setIsUploading(true);
-
+    const localUrl = URL.createObjectURL(blob);
+    setPreview(localUrl);
     try {
-      const ext = file.name.split('.').pop() ?? 'jpg';
-      // Use petId if available, otherwise a temp timestamp so it can be renamed later
       const filename = petId ?? `temp_${Date.now()}`;
       const path = `${userId}/${filename}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from('pet-photos')
-        .upload(path, file, { upsert: true });
+        .upload(path, blob, { upsert: true, contentType: blob.type });
 
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from('pet-photos').getPublicUrl(path);
-      // Bust cache on re-upload
       const publicUrl = `${data.publicUrl}?t=${Date.now()}`;
       onPhotoChange(publicUrl);
       setPreview(publicUrl);
@@ -65,6 +53,32 @@ export function PetPhotoUpload({
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleFile = (file: File) => {
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast.error('Formato não suportado. Use JPG, PNG, WEBP ou GIF.');
+      return;
+    }
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      toast.error(`A foto deve ter no máximo ${MAX_SIZE_MB}MB.`);
+      return;
+    }
+
+    // Open cropper instead of uploading directly
+    const url = URL.createObjectURL(file);
+    setCropSrc(url);
+  };
+
+  const handleCropConfirm = async (blob: Blob) => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
+    await uploadBlob(blob, 'jpg');
+  };
+
+  const handleCropCancel = () => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
   };
 
   const handleRemove = async () => {
@@ -121,14 +135,24 @@ export function PetPhotoUpload({
       </div>
 
       {preview && !isUploading && (
-        <button
-          type="button"
-          onClick={handleRemove}
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors"
-        >
-          <X className="w-3 h-3" />
-          Remover foto
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex items-center gap-1 text-xs text-[#2B70B2] hover:text-[#1d5687] transition-colors"
+          >
+            <Camera className="w-3 h-3" />
+            Alterar foto
+          </button>
+          <button
+            type="button"
+            onClick={handleRemove}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors"
+          >
+            <X className="w-3 h-3" />
+            Remover foto
+          </button>
+        </div>
       )}
 
       <p className="text-[11px] text-gray-400 text-center">
@@ -145,6 +169,13 @@ export function PetPhotoUpload({
           if (file) handleFile(file);
           e.target.value = '';
         }}
+      />
+
+      <PetPhotoCropper
+        open={!!cropSrc}
+        imageSrc={cropSrc}
+        onCancel={handleCropCancel}
+        onConfirm={handleCropConfirm}
       />
     </div>
   );

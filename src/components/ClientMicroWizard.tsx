@@ -356,8 +356,8 @@ const ClientMicroWizard: React.FC<ClientMicroWizardProps> = ({
       {/* Phone + WhatsApp inline */}
       <div>
         <Label htmlFor="wizard-phone" className="text-sm font-medium text-gray-700">Telefone</Label>
-        <div className="flex items-center gap-3 mt-1.5">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mt-1.5">
+          <div className="flex-1 min-w-0">
             <PhoneInputBR
               value={wizardData.phone || ''}
               onChange={(value) => updateWizardData({ phone: value })}
@@ -366,7 +366,7 @@ const ClientMicroWizard: React.FC<ClientMicroWizardProps> = ({
           </div>
           <label
             htmlFor="wizard-whatsapp"
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all select-none text-sm ${
+            className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all select-none text-sm ${
               wizardData.is_whatsapp
                 ? 'border-green-400 bg-green-50 text-green-700'
                 : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
@@ -668,13 +668,13 @@ const ClientMicroWizard: React.FC<ClientMicroWizardProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) onClose();
     }}>
-      <DialogContent className="max-w-[440px] max-h-[90vh] overflow-hidden p-0 gap-0 rounded-2xl border-0 shadow-2xl">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-[440px] max-h-[92vh] overflow-hidden p-0 gap-0 rounded-2xl border-0 shadow-2xl">
         {/* Top gradient accent bar */}
         <div className="h-1.5 bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-primary" />
 
         {/* Progress section - only show on form steps */}
         {currentStep > 0 && (
-          <div className="px-6 pt-5 pb-3">
+          <div className="px-4 sm:px-6 pt-5 pb-3">
             {/* Step pills */}
             <div className="flex items-center gap-2 mb-3">
               {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((step) => {
@@ -727,7 +727,7 @@ const ClientMicroWizard: React.FC<ClientMicroWizardProps> = ({
         )}
 
         {/* Step content with animation */}
-        <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-180px)]">
+        <div className="px-4 sm:px-6 py-4 overflow-y-auto max-h-[calc(92vh-180px)]">
           <div
             className={`transition-all duration-300 ease-out ${
               isAnimating
@@ -742,7 +742,7 @@ const ClientMicroWizard: React.FC<ClientMicroWizardProps> = ({
         </div>
 
         {/* Footer actions */}
-        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+        <div className="px-3 sm:px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between gap-2">
           <div>
             {currentStep > 1 && (
               <Button
