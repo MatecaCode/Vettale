@@ -320,10 +320,13 @@ export const useAppointmentData = () => {
         }
 
         // Secondary segment (if exists)
-        if (isSlotAvailable && secondaryDuration > 0 && uniqueStaffIds.length >= 2) {
-          const secondaryStaffId = uniqueStaffIds[1];
-          // secondary starts after primary ends
-          const secondaryStart = requiredPrimary.length > 0 ? requiredPrimary[requiredPrimary.length - 1] : clientSlot;
+        // IMPORTANT: when only one staff is selected for a dual-service booking,
+        // the DB's create_booking_atomic falls back v_secondary_staff := v_primary_staff
+        // and still reserves the secondary window. The UI must mirror that —
+        // otherwise the slot looks free here but the DB rejects it on submit
+        // with "Not enough secondary slots reserved".
+        if (isSlotAvailable && secondaryDuration > 0) {
+          const secondaryStaffId = uniqueStaffIds[1] ?? uniqueStaffIds[0];
           // compute actual start time as clientSlot + primaryDuration
           const requiredSecondary = getRequiredBackendSlots(clientSlot, primaryDuration + secondaryDuration, isSaturday)
             .slice(requiredPrimary.length);
